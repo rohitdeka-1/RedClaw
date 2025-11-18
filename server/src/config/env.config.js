@@ -9,7 +9,10 @@ const envConfig = {
     REFRESH_TOKEN: process.env.REFRESH_TOKEN, 
     GOOGLE_APP_GMAIL: process.env.GOOGLE_APP_GMAIL || process.env.EMAIL_USER,
     GOOGLE_APP_PASSWORD: process.env.GOOGLE_APP_PASSWORD || process.env.EMAIL_PASS,
-    UPSTASH_REDIS_URL: process.env.UPSTASH_REDIS_URL
+    UPSTASH_REDIS_URL: process.env.UPSTASH_REDIS_URL,
+    CLOUDI_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+	CLOUDI_API_KEY: process.env.CLOUDINARY_API_KEY,
+	CLOUDI_API_SECRET: process.env.CLOUDINARY_API_SECRET
 }
 
 export default envConfig;

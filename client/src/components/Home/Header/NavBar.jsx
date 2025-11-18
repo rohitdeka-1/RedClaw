@@ -28,7 +28,7 @@ const NavBar = ({ forceDark = false }) => {
                         <Link to="/" className={`text-4xl font-bold tracking-tight transition-colors duration-300 ${
                             useDarkText ? 'text-gray-900' : 'text-white'
                         }`}>
-                            dreo.
+                            RedClaw.
                         </Link>
                     </div>
                     <div className="flex flex-col items-center justify-center gap-3 flex-1">

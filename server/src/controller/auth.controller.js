@@ -1,8 +1,12 @@
 import { redis } from "../lib/redis.js";
 import { User } from "../models/User.model.js";
 import jwt from "jsonwebtoken";
+import { sendMail } from "../services/mailer.services.js";
+import { getClientIp, parseUserAgent, getLocationFromIp, formatDate } from "../services/getIP.js";
+import envConfig from "../config/env.config.js";
 
 const generateTokens = (userId) => {
+
     const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "15m",
     });
@@ -12,6 +16,7 @@ const generateTokens = (userId) => {
     });
 
     return { accessToken, refreshToken };
+    
 };
 
 const storeRefreshToken = async (userId, refreshToken) => {
@@ -20,16 +25,16 @@ const storeRefreshToken = async (userId, refreshToken) => {
 
 const setCookies = (res, accessToken, refreshToken) => {
     res.cookie("accessToken", accessToken, {
-        httpOnly: true, // prevent XSS attacks, cross site scripting attack
+        httpOnly: true, 
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict", // prevents CSRF attack, cross-site request forgery attack
-        maxAge: 15 * 60 * 1000, // 15 minutes
+        sameSite: "strict",
+        maxAge: 15 * 60 * 1000,
     });
     res.cookie("refreshToken", refreshToken, {
-        httpOnly: true, // prevent XSS attacks, cross site scripting attack
+        httpOnly: true, 
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict", // prevents CSRF attack, cross-site request forgery attack
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 };
 
@@ -43,18 +48,37 @@ export const signup = async (req, res) => {
         }
         const user = await User.create({ name, email, password });
 
-        // authenticate
         const { accessToken, refreshToken } = generateTokens(user._id);
         await storeRefreshToken(user._id, refreshToken);
 
         setCookies(res, accessToken, refreshToken);
+
+        //welcome email
+        try {
+            await sendMail(
+                user.email,
+                "Welcome to RedClaw - Your Account is Ready! 🎉",
+                "welcome",
+                {
+                    name: user.name,
+                    email: user.email,
+                    registrationDate: formatDate(),
+                    role: user.role.charAt(0).toUpperCase() + user.role.slice(1),
+                    frontendUrl: envConfig.FRONT_END || "http://localhost:5173",
+                    year: new Date().getFullYear()
+                }
+            );
+            console.log(" Welcome email sent successfully to:", user.email);
+        } catch (emailError) {
+            console.error(" Failed to send welcome email:", emailError.message);
+        }
 
         res.status(201).json({
             _id: user._id,
             name: user.name,
             email: user.email,
             role: user.role,
-            messsage: "User created successfully"
+            message: "User created successfully"
         });
     } catch (error) {
         console.log("Error in signup controller", error.message);
@@ -71,6 +95,34 @@ export const login = async (req, res) => {
             const { accessToken, refreshToken } = generateTokens(user._id);
             await storeRefreshToken(user._id, refreshToken);
             setCookies(res, accessToken, refreshToken);
+
+            const ipAddress = getClientIp(req);
+            const userAgent = req.headers['user-agent'] || '';
+            const { browser, os, deviceInfo } = parseUserAgent(userAgent);
+            const location = getLocationFromIp(ipAddress);
+
+            
+            try {
+                await sendMail(
+                    user.email,
+                    "🔐 New Login Alert - RedClaw Account",
+                    "login",
+                    {
+                        name: user.name,
+                        email: user.email,
+                        loginTime: formatDate(),
+                        ipAddress: ipAddress,
+                        deviceInfo: deviceInfo,
+                        browser: browser,
+                        os: os,
+                        location: location,
+                        frontendUrl: envConfig.FRONT_END || "http://localhost:5173",
+                        year: new Date().getFullYear()
+                    }
+                );
+            } catch (emailError) {
+                console.error("Failed to send login notification:", emailError.message);
+            }
 
             res.json({
                 _id: user._id,
@@ -97,7 +149,7 @@ export const logout = async (req, res) => {
         }
 
         res.clearCookie("accessToken");
-        res.clearCookie("refreshToken");
+        res.clearCookie("refreshToken"); 
         res.json({ message: "Logged out successfully" });
     } catch (error) {
         console.log("Error in logout controller", error.message);
@@ -105,7 +157,6 @@ export const logout = async (req, res) => {
     }
 };
 
-// this will refresh the access token
 export const refreshToken = async (req, res) => {
     try {
         const refreshToken = req.cookies.refreshToken;
