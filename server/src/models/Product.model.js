@@ -25,9 +25,9 @@ const productSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
-    image: {
+    coverImage: {
         type: String,
-        required: [true, "At least one image is required"],
+        required: [true, "Cover image is required"],
     },
     images: {
         type: [String],

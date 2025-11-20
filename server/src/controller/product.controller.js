@@ -1,5 +1,5 @@
 import { redis } from "../lib/redis.js";
-import { v2 as cloudinary } from "cloudinary";
+import cloudinary from "../lib/cloudinary.js";
 import { Product } from "../models/Product.model.js";
 
 export const getAllProducts = async (req, res) => {
@@ -42,14 +42,14 @@ export const getFeaturedProducts = async (req, res) => {
 
 export const createProduct = async (req, res) => {
 	try {
-		const { name, description, price, image, images, category, stock, isAvailable } = req.body;
+		const { name, description, price, coverImage, images, category, stock, isAvailable } = req.body;
 
-		let mainImageUrl = "";
+		let coverImageUrl = "";
 		let additionalImagesUrls = [];
 
-		// Upload main image
-		if (image) {
-			const cloudinaryResponse = await cloudinary.uploader.upload(image, { 
+		// Upload cover image
+		if (coverImage) {
+			const cloudinaryResponse = await cloudinary.uploader.upload(coverImage, { 
 				folder: "products",
 				transformation: [
 					{ width: 1000, height: 1000, crop: "limit" },
@@ -57,7 +57,7 @@ export const createProduct = async (req, res) => {
 					{ fetch_format: "auto" }
 				]
 			});
-			mainImageUrl = cloudinaryResponse.secure_url;
+			coverImageUrl = cloudinaryResponse.secure_url;
 		}
 
 		// Upload additional images (if provided)
@@ -81,7 +81,7 @@ export const createProduct = async (req, res) => {
 			name,
 			description,
 			price,
-			image: mainImageUrl,
+			coverImage: coverImageUrl,
 			images: additionalImagesUrls,
 			category,
 			stock: stock || 0,
@@ -107,14 +107,14 @@ export const deleteProduct = async (req, res) => {
 			return res.status(404).json({ message: "Product not found" });
 		}
 
-		// Delete main image from cloudinary
-		if (product.image) {
-			const publicId = product.image.split("/").pop().split(".")[0];
+		// Delete cover image from cloudinary
+		if (product.coverImage) {
+			const publicId = product.coverImage.split("/").pop().split(".")[0];
 			try {
 				await cloudinary.uploader.destroy(`products/${publicId}`);
-				console.log("Deleted main image from cloudinary");
+				console.log("Deleted cover image from cloudinary");
 			} catch (error) {
-				console.log("Error deleting main image from cloudinary", error);
+				console.log("Error deleting cover image from cloudinary", error);
 			}
 		}
 
@@ -156,7 +156,7 @@ export const getRecommendedProducts = async (req, res) => {
 					_id: 1,
 					name: 1,
 					description: 1,
-					image: 1,
+					coverImage: 1,
 					price: 1,
 				},
 			},
@@ -227,7 +227,7 @@ export const updateProduct = async (req, res) => {
 	}
 };
 
-// Update stock quantity (Admin only)
+ 
 export const updateStock = async (req, res) => {
 	try {
 		const { stock, operation } = req.body; // operation: 'set', 'add', 'subtract'
@@ -278,10 +278,10 @@ export const updateStock = async (req, res) => {
 	}
 };
 
-// Add additional images to product
+ 
 export const addProductImages = async (req, res) => {
 	try {
-		const { images } = req.body; // Array of base64 images
+		const { images } = req.body;  
 		const product = await Product.findById(req.params.id);
 
 		if (!product) {
@@ -292,16 +292,14 @@ export const addProductImages = async (req, res) => {
 			return res.status(400).json({ message: "No images provided" });
 		}
 
-		// Check total images limit (current + new should not exceed 10)
-		const totalImages = product.images.length + images.length;
+ 		const totalImages = product.images.length + images.length;
 		if (totalImages > 10) {
 			return res.status(400).json({ 
 				message: `Cannot add ${images.length} images. Maximum 10 images allowed. Current: ${product.images.length}` 
 			});
 		}
 
-		// Upload new images to Cloudinary
-		const uploadPromises = images.map(img => 
+ 		const uploadPromises = images.map(img => 
 			cloudinary.uploader.upload(img, { 
 				folder: "products",
 				transformation: [
@@ -315,8 +313,7 @@ export const addProductImages = async (req, res) => {
 		const uploadResults = await Promise.all(uploadPromises);
 		const newImageUrls = uploadResults.map(result => result.secure_url);
 
-		// Add new images to product
-		product.images.push(...newImageUrls);
+ 		product.images.push(...newImageUrls);
 		await product.save();
 
 		res.status(200).json({
@@ -330,8 +327,7 @@ export const addProductImages = async (req, res) => {
 	}
 };
 
-// Remove specific image from product
-export const removeProductImage = async (req, res) => {
+ export const removeProductImage = async (req, res) => {
 	try {
 		const { imageUrl } = req.body;
 		const product = await Product.findById(req.params.id);
@@ -344,14 +340,12 @@ export const removeProductImage = async (req, res) => {
 			return res.status(400).json({ message: "Image URL is required" });
 		}
 
-		// Check if image exists in product
-		const imageIndex = product.images.indexOf(imageUrl);
+ 		const imageIndex = product.images.indexOf(imageUrl);
 		if (imageIndex === -1) {
 			return res.status(404).json({ message: "Image not found in product" });
 		}
 
-		// Delete from Cloudinary
-		const publicId = imageUrl.split("/").pop().split(".")[0];
+ 		const publicId = imageUrl.split("/").pop().split(".")[0];
 		try {
 			await cloudinary.uploader.destroy(`products/${publicId}`);
 			console.log(`Deleted image from cloudinary: ${publicId}`);
@@ -359,8 +353,7 @@ export const removeProductImage = async (req, res) => {
 			console.log("Error deleting image from cloudinary:", error);
 		}
 
-		// Remove from product images array
-		product.images.splice(imageIndex, 1);
+ 		product.images.splice(imageIndex, 1);
 		await product.save();
 
 		res.status(200).json({
@@ -374,33 +367,30 @@ export const removeProductImage = async (req, res) => {
 	}
 };
 
-// Update main product image
-export const updateMainImage = async (req, res) => {
+ export const updateCoverImage = async (req, res) => {
 	try {
-		const { image } = req.body; // base64 image
+		const { coverImage } = req.body; // base64 image
 		const product = await Product.findById(req.params.id);
 
 		if (!product) {
 			return res.status(404).json({ message: "Product not found" });
 		}
 
-		if (!image) {
-			return res.status(400).json({ message: "Image is required" });
+		if (!coverImage) {
+			return res.status(400).json({ message: "Cover image is required" });
 		}
 
-		// Delete old main image from Cloudinary
-		if (product.image) {
-			const oldPublicId = product.image.split("/").pop().split(".")[0];
+ 		if (product.coverImage) {
+			const oldPublicId = product.coverImage.split("/").pop().split(".")[0];
 			try {
 				await cloudinary.uploader.destroy(`products/${oldPublicId}`);
-				console.log("Deleted old main image from cloudinary");
+				console.log("Deleted old cover image from cloudinary");
 			} catch (error) {
-				console.log("Error deleting old main image:", error);
+				console.log("Error deleting old cover image:", error);
 			}
 		}
 
-		// Upload new main image
-		const cloudinaryResponse = await cloudinary.uploader.upload(image, { 
+ 		const cloudinaryResponse = await cloudinary.uploader.upload(coverImage, { 
 			folder: "products",
 			transformation: [
 				{ width: 1000, height: 1000, crop: "limit" },
@@ -409,16 +399,16 @@ export const updateMainImage = async (req, res) => {
 			]
 		});
 
-		product.image = cloudinaryResponse.secure_url;
+		product.coverImage = cloudinaryResponse.secure_url;
 		await product.save();
 
 		res.status(200).json({
 			success: true,
-			message: "Main image updated successfully",
+			message: "Cover image updated successfully",
 			product: product
 		});
 	} catch (error) {
-		console.log("Error in updateMainImage controller", error.message);
+		console.log("Error in updateCoverImage controller", error.message);
 		res.status(500).json({ message: "Server error", error: error.message });
 	}
 };

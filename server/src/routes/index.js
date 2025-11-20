@@ -5,6 +5,8 @@ import hbs from "nodemailer-express-handlebars"
 import authRoutes from "./auth.route.js";
 import prodRoute from "./product.route.js";
 import cartRoute from "./cart.route.js";
+import couponRoute from "./coupon.route.js";
+import payRouter from "./payment.route.js";
 
 const router = Router();
 
@@ -12,6 +14,9 @@ const router = Router();
 router.use("/auth",authRoutes);
 router.use("/product",prodRoute);
 router.use("/cart",cartRoute);
+router.use("/payment", payRouter);
+router.use("/coupon", couponRoute);
+
 
 
 //handlebars

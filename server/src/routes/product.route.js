@@ -12,7 +12,7 @@ import {
 	updateStock,
 	addProductImages,
 	removeProductImage,
-	updateMainImage
+	updateCoverImage
 } from "../controller/product.controller.js";
 
 const prodRoute = express.Router();
@@ -35,6 +35,6 @@ prodRoute.patch("/:id/stock", protectRoute, adminRoute, updateStock);
 // Admin only routes - Image management
 prodRoute.post("/:id/images", protectRoute, adminRoute, addProductImages);
 prodRoute.delete("/:id/images", protectRoute, adminRoute, removeProductImage);
-prodRoute.patch("/:id/main-image", protectRoute, adminRoute, updateMainImage);
+prodRoute.patch("/:id/cover-image", protectRoute, adminRoute, updateCoverImage);
 
 export default prodRoute;
