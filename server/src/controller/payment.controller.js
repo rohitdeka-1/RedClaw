@@ -1,14 +1,27 @@
 import Coupon from "../models/Coupon.model.js";
 import Order from "../models/Order.model.js";
+import { User } from "../models/User.model.js";
 import { razorpay } from "../lib/razorpay.js";
 import crypto from "crypto";
 
 export const createCheckoutSession = async (req, res) => {
 	try {
-		const { products, couponCode } = req.body;
+		const { products, couponCode, addressId } = req.body;
 
 		if (!Array.isArray(products) || products.length === 0) {
 			return res.status(400).json({ error: "Invalid or empty products array" });
+		}
+
+		// Validate shipping address
+		if (!addressId) {
+			return res.status(400).json({ error: "Shipping address is required" });
+		}
+
+		const user = await User.findById(req.user._id);
+		const shippingAddress = user.addresses.id(addressId);
+
+		if (!shippingAddress) {
+			return res.status(404).json({ error: "Address not found" });
 		}
 
 		let totalAmount = 0;
@@ -41,6 +54,7 @@ export const createCheckoutSession = async (req, res) => {
 				userId: req.user._id.toString(),
 				couponCode: couponCode || "",
 				discountAmount: discountAmount,
+				addressId: addressId,
 				products: JSON.stringify(
 					products.map((p) => ({
 						id: p._id,
@@ -92,6 +106,14 @@ export const checkoutSuccess = async (req, res) => {
 		const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
 
 		if (razorpayOrder.status === "paid") {
+			// Get user and shipping address
+			const user = await User.findById(razorpayOrder.notes.userId);
+			const shippingAddress = user.addresses.id(razorpayOrder.notes.addressId);
+
+			if (!shippingAddress) {
+				return res.status(404).json({ message: "Shipping address not found" });
+			}
+
 			// Deactivate coupon if used
 			if (razorpayOrder.notes.couponCode) {
 				await Coupon.findOneAndUpdate(
@@ -115,6 +137,16 @@ export const checkoutSuccess = async (req, res) => {
 					price: product.price,
 				})),
 				totalAmount: razorpayOrder.amount / 100, // convert from paise to rupees
+				shippingAddress: {
+					fullName: shippingAddress.fullName,
+					phone: shippingAddress.phone,
+					addressLine1: shippingAddress.addressLine1,
+					addressLine2: shippingAddress.addressLine2,
+					city: shippingAddress.city,
+					state: shippingAddress.state,
+					pincode: shippingAddress.pincode,
+					country: shippingAddress.country,
+				},
 				razorpayOrderId: razorpay_order_id,
 				razorpayPaymentId: razorpay_payment_id,
 			});
