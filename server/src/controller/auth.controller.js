@@ -63,7 +63,7 @@ export const signup = async (req, res) => {
 
             
             try {
-                await sendMail(
+                sendMail(
                     userExists.email,
                     "Verify Your Email - New OTP Code",
                     "otp",
@@ -101,7 +101,7 @@ export const signup = async (req, res) => {
         });
 
         try {
-            await sendMail(
+            sendMail(
                 user.email,
                 "Verify Your Email - OTP Code",
                 "otp",
@@ -162,7 +162,7 @@ export const verifyOTP = async (req, res) => {
 
         // Send welcome email
         try {
-            await sendMail(
+            sendMail(
                 user.email,
                 "Welcome to RedClaw - Your Account is Ready! 🎉",
                 "welcome",
@@ -216,7 +216,7 @@ export const resendOTP = async (req, res) => {
 
         // Send OTP email
         try {
-            await sendMail(
+            sendMail(
                 user.email,
                 "Verify Your Email - New OTP Code",
                 "otp",
@@ -268,7 +268,7 @@ export const login = async (req, res) => {
 
             
             try {
-                await sendMail(
+                sendMail(
                     user.email,
                     "🔐 New Login Alert - RedClaw Account",
                     "login",
