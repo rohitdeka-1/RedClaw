@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Package, MapPin, CreditCard, Calendar, Truck, CheckCircle } from "lucide-react";
 import { getOrderById } from "../utils/order";
 import { toast } from "react-toastify";
+import { OrderDetailsSkeleton } from "./OrderDetailsSkeleton";
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -71,11 +72,7 @@ export default function OrderDetails() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-      </div>
-    );
+    return <OrderDetailsSkeleton />;
   }
 
   if (!order) {

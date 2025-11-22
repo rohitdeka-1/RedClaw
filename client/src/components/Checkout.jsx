@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { ShoppingCart, Plus, Check, ArrowLeft, Lock, Minus, X } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { isAuthenticated } from "../utils/auth"
@@ -7,6 +7,9 @@ import { getAddresses, addAddress, deleteAddress, setDefaultAddress } from "../u
 import { getBillingAddresses, addBillingAddress, deleteBillingAddress } from "../utils/billingAddress"
 import { createCheckoutSession, verifyPayment } from "../utils/payment"
 import { toast } from 'react-toastify'
+import { LoadingButton, Spinner } from "./LoadingButton"
+import { CheckoutSkeleton } from "./Skeleton"
+import { useDebouncedCallback } from "../hooks/useDebounce"
 
 // Product IDs for mapping UI data
 const productIds = {
@@ -48,6 +51,10 @@ export default function Checkout() {
   const [couponCode, setCouponCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isAddingAddress, setIsAddingAddress] = useState(false)
+  const [isDeletingAddress, setIsDeletingAddress] = useState(null)
+  const [isPageLoading, setIsPageLoading] = useState(true)
+  const [isAddingBillingAddress, setIsAddingBillingAddress] = useState(false)
 
   // Billing address states
   const [billingAddresses, setBillingAddresses] = useState([])
@@ -82,25 +89,32 @@ export default function Checkout() {
     const loggedIn = isAuthenticated();
     setIsLoggedIn(loggedIn);
     
-    if (loggedIn) {
-      loadCartFromServer();
-      loadAddressesFromServer();
-      loadBillingAddressesFromServer();
-    } else {
-      const savedCart = JSON.parse(localStorage.getItem("cart") || "[]");
-      
-      // Filter out old invalid cart items (numeric IDs)
-      const validCart = savedCart.filter(item => {
-        const id = item.productId || item.id || item._id;
-        return id && typeof id === 'string' && id.length === 24 && /^[a-f\d]{24}$/i.test(id);
-      });
-      
-      if (validCart.length !== savedCart.length) {
-        localStorage.setItem("cart", JSON.stringify(validCart));
+    const loadInitialData = async () => {
+      if (loggedIn) {
+        await Promise.all([
+          loadCartFromServer(),
+          loadAddressesFromServer(),
+          loadBillingAddressesFromServer()
+        ]);
+      } else {
+        const savedCart = JSON.parse(localStorage.getItem("cart") || "[]");
+        
+        // Filter out old invalid cart items (numeric IDs)
+        const validCart = savedCart.filter(item => {
+          const id = item.productId || item.id || item._id;
+          return id && typeof id === 'string' && id.length === 24 && /^[a-f\d]{24}$/i.test(id);
+        });
+        
+        if (validCart.length !== savedCart.length) {
+          localStorage.setItem("cart", JSON.stringify(validCart));
+        }
+        
+        setCart(validCart);
       }
-      
-      setCart(validCart);
-    }
+      setIsPageLoading(false);
+    };
+
+    loadInitialData();
   }, []);
 
   // Auto-update billing form when shipping address changes and "same as shipping" is checked
@@ -164,24 +178,38 @@ export default function Checkout() {
     }
   };
 
-  const handleUpdateQuantity = async (itemId, newQuantity) => {
-    if (newQuantity < 1) return;
-    
+  // Debounced API call for quantity update (no visual loader, just background sync)
+  const debouncedQuantityUpdate = useDebouncedCallback(async (itemId, newQuantity) => {
     if (isLoggedIn) {
       try {
         await updateCartQuantity(itemId, newQuantity);
+        // Silently sync with server in background
         await loadCartFromServer();
       } catch (error) {
         console.error("Error updating quantity:", error);
         toast.error("Failed to update quantity");
+        // Reload to revert to server state
+        await loadCartFromServer();
       }
+    }
+  }, 800); // 800ms delay - waits for user to finish clicking
+
+  const handleUpdateQuantity = async (itemId, newQuantity) => {
+    if (newQuantity < 1) return;
+    
+    // Optimistic UI update - INSTANT feedback (like cart)
+    const updatedCart = cart.map(item =>
+      (item._id === itemId || item.id === itemId)
+        ? { ...item, quantity: newQuantity }
+        : item
+    );
+    setCart(updatedCart);
+
+    if (isLoggedIn) {
+      // Debounced API call in background - NO visible loader
+      debouncedQuantityUpdate(itemId, newQuantity);
     } else {
-      const updatedCart = cart.map(item =>
-        item._id === itemId || item.id === itemId
-          ? { ...item, quantity: newQuantity }
-          : item
-      );
-      setCart(updatedCart);
+      // For guest users, just update localStorage
       localStorage.setItem("cart", JSON.stringify(updatedCart));
     }
   };
@@ -215,6 +243,7 @@ export default function Checkout() {
       return;
     }
 
+    setIsAddingAddress(true);
     try {
       const result = await addAddress(addressForm);
       setAddresses(result.addresses);
@@ -239,6 +268,8 @@ export default function Checkout() {
     } catch (error) {
       console.error("Error adding address:", error);
       toast.error("Failed to add address. Please try again.");
+    } finally {
+      setIsAddingAddress(false);
     }
   };
 
@@ -324,6 +355,7 @@ export default function Checkout() {
       return;
     }
 
+    setIsAddingBillingAddress(true);
     try {
       const result = await addBillingAddress(billingForm);
       await loadBillingAddressesFromServer();
@@ -346,6 +378,8 @@ export default function Checkout() {
     } catch (error) {
       console.error("Error adding billing address:", error);
       toast.error("Failed to add billing address. Please try again.");
+    } finally {
+      setIsAddingBillingAddress(false);
     }
   };
 
@@ -477,6 +511,11 @@ export default function Checkout() {
     }
   };
 
+  // Show skeleton while loading initial data
+  if (isPageLoading) {
+    return <CheckoutSkeleton />;
+  }
+
   return (
     <div className="min-h-screen w-full bg-gray-50">
       <div className="w-full px-4 md:px-8 py-4 border-b border-gray-200 bg-white sticky top-0 z-50 shadow-sm">
@@ -532,7 +571,7 @@ export default function Checkout() {
                           <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-2 py-1">
                             <button
                               onClick={() => handleUpdateQuantity(item._id || item.id, item.quantity - 1)}
-                              className="text-gray-600 hover:text-gray-900 transition p-1"
+                              className="text-gray-600 hover:text-gray-900 transition p-1 disabled:opacity-50"
                               disabled={item.quantity <= 1}
                             >
                               <Minus size={14} />
@@ -645,12 +684,14 @@ export default function Checkout() {
                       />
                     </div>
                     <div className="flex gap-3 pt-4">
-                      <button
+                      <LoadingButton
                         type="submit"
+                        isLoading={isAddingAddress}
+                        loadingText="Saving..."
                         className="flex-1 bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition"
                       >
                         Save Address
-                      </button>
+                      </LoadingButton>
                       <button
                         type="button"
                         onClick={() => setShowAddressForm(false)}
@@ -823,12 +864,14 @@ export default function Checkout() {
                       />
                     </div>
                     <div className="flex gap-3 pt-4">
-                      <button
+                      <LoadingButton
                         type="submit"
+                        isLoading={isAddingBillingAddress}
+                        loadingText="Saving..."
                         className="flex-1 bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition"
                       >
                         Save Billing Address
-                      </button>
+                      </LoadingButton>
                       <button
                         type="button"
                         onClick={() => setShowBillingForm(false)}
@@ -965,20 +1008,15 @@ export default function Checkout() {
                 </div>
 
                 {/* Checkout Button */}
-                <button
+                <LoadingButton
                   onClick={handleCheckout}
-                  disabled={loading || cart.length === 0 || !selectedAddress || (!sameAsShipping && !selectedBillingAddress)}
+                  isLoading={loading}
+                  loadingText="Processing..."
+                  disabled={cart.length === 0 || !selectedAddress || (!sameAsShipping && !selectedBillingAddress)}
                   className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed mb-4"
                 >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Processing...
-                    </span>
-                  ) : (
-                    "Proceed to Payment"
-                  )}
-                </button>
+                  Proceed to Payment
+                </LoadingButton>
 
                 {/* Security Badge */}
                 <div className="flex items-center justify-center gap-2 text-gray-500 text-xs mb-6">

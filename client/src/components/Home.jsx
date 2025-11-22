@@ -6,6 +6,7 @@ import { getCartItems, addToCartAPI, clearCart as clearServerCart } from "../uti
 import axiosInstance from "../utils/axios";
 import Footer from "./Footer";
 import { toast } from 'react-toastify';
+import { LoadingButton } from "./LoadingButton";
 
 // UI-only data for the 3 products (bgColor, logo, etc.)
 const productUIData = {
@@ -52,6 +53,7 @@ export default function Home() {
     const [scrollLocked, setScrollLocked] = useState(true);
     const isTransitioning = useRef(false);
     const [showDropdown, setShowDropdown] = useState(false);
+    const [isAddingToCart, setIsAddingToCart] = useState(false);
     const dropdownRef = useRef(null);
     const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -267,10 +269,10 @@ export default function Home() {
 
     // Update selected color when product changes
     useEffect(() => {
-        if (product.colors) {
+        if (product?.colors) {
             setSelectedColor(product.colors[0]);
         }
-    }, [currentProduct, product.colors]);
+    }, [currentProduct, product?.colors]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -284,14 +286,6 @@ export default function Home() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    if (loading || products.length === 0) {
-        return (
-            <div className="min-h-screen w-full flex items-center justify-center bg-gray-900">
-                <div className="text-white text-xl">Loading products...</div>
-            </div>
-        );
-    }
-
     const addToCart = async () => {
         if (!isLoggedIn) {
             toast.error("Please login to add items to cart");
@@ -299,12 +293,36 @@ export default function Home() {
             return;
         }
 
+        if (!product || !product._id) {
+            toast.error("Product not loaded yet");
+            return;
+        }
+
+        setIsAddingToCart(true);
+        
         try {
+            // Optimistic UI update - add immediately
+            const tempItem = {
+                product: {
+                    _id: product._id,
+                    name: product.name,
+                    price: product.price,
+                    imageUrl: product.imageUrl,
+                },
+                quantity: 1,
+                _id: `temp-${Date.now()}`,
+            };
+            setCart(prev => [...prev, tempItem]);
+            toast.success("Added to cart!", { autoClose: 1500 });
+
+            // Then sync with server in background
             await addToCartAPI(product._id);
-            await loadCartFromServer();
-            toast.success("Added to cart!");
+            await loadCartFromServer(); // Get actual cart with proper IDs
         } catch (error) {
             console.error("Error adding to cart:", error);
+            // Revert optimistic update on error
+            setCart(prev => prev.filter(item => !item._id.startsWith('temp-')));
+            
             if (error.response?.status === 401) {
                 toast.error("Session expired. Please log in again.");
                 setIsLoggedIn(false);
@@ -315,6 +333,8 @@ export default function Home() {
             } else {
                 toast.error("Failed to add to cart. Please try again.");
             }
+        } finally {
+            setIsAddingToCart(false);
         }
     };
 
@@ -352,19 +372,32 @@ export default function Home() {
     };
 
     return (
-        <div className="min-h-screen w-full">
+        <div className="min-h-screen w-full relative">
+            {/* Loading Overlay with smooth fade */}
+            {loading && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-radial bg-gray-900  transition-all duration-700 ease-in-out">
+                    <div className="text-7xl md:text-9xl font-black text-white/40 select-none tracking-tighter animate-pulse" 
+                         style={{ 
+                             fontSize: 'clamp(4rem, 12vw, 10rem)',
+                             animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                         }}>
+                        LOADING
+                    </div>
+                </div>
+            )}
+            
             <div
                 ref={containerRef}
                 className={`min-h-screen w-full relative ${scrollLocked ? 'overflow-hidden' : 'overflow-auto'} ${!isInitialLoad ? 'transition-all duration-1000' : ''}`}
                 style={{
-                    background: `radial-gradient(circle at center, ${product.midColor} 0%, ${product.bgColor} 100%)`,
+                    background: `radial-gradient(circle at center, ${product?.midColor || '#0f172a'} 0%, ${product?.bgColor || '#9ca3af'} 100%)`,
                 }}
             >
                 {/* Navbar */}
                 <div className="w-full px-4 md:px-8">
                     <nav className="flex items-center justify-between py-4 md:py-6 max-w-full mx-auto">
                         <div className="flex items-center gap-2 md:gap-3">
-                            <img src={product.logo} alt="RedClaw Logo" className="h-10 md:h-16 object-contain" />
+                            <img src={product?.logo || '/temp.png'} alt="RedClaw Logo" className="h-10 md:h-16 object-contain" />
                         </div>
                         <div className="flex items-center gap-3 md:gap-8">
                             <div className="hidden md:flex gap-6 text-white items-center">
@@ -442,49 +475,49 @@ export default function Home() {
             {/* Product and Contact Buttons - Above Main Content */}
             <div className="flex justify-center gap-3 md:gap-4 px-4 md:px-16 pt-4 md:pt-8">
                 <button className="bg-white text-gray-900 px-4 py-1.5 md:px-6 md:py-2 rounded-full font-semibold hover:opacity-90 transition w-24 md:w-32 text-center text-sm md:text-base">
-                    {product.name.split(" ")[1]}
+                    {product?.name?.split(" ")[1] || "Product"}
                 </button>
                 <button
                     className="border border-white/30 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-full hover:bg-white/10 transition w-24 md:w-32 text-center text-sm md:text-base"
-                    style={{ backgroundColor: `${product.bgColor}80` }} 
+                    style={{ backgroundColor: `${product?.bgColor || '#0f172a'}80` }} 
                 >
                     Contact
                 </button>
             </div>
 
-            {/* Main Content - Centered */}
-            <div className="flex flex-col md:flex-row min-h-[calc(100vh-200px)] items-center justify-between px-4 md:px-8 gap-8 md:gap-0">
+            {/* Main Content - Centered - Adjusted for better mobile spacing */}
+            <div className="flex flex-col md:flex-row min-h-[calc(100vh-220px)] md:min-h-[calc(100vh-200px)] items-center justify-between px-4 md:px-8 gap-4 md:gap-0 -mt-8 md:mt-0">
                 {/* Left Column - Product Info */}
-                <div className="flex flex-col justify-center w-full md:w-1/4 text-center md:text-left">
-                    <h1 className="text-3xl md:text-5xl font-black text-white mb-3 md:mb-4 leading-tight">
-                        {product.tagline}
+                <div className="flex flex-col justify-center w-full md:w-1/4 text-center md:text-left mb-4 md:mb-0">
+                    <h1 className="text-3xl md:text-5xl font-black text-white mb-2 md:mb-4 leading-tight">
+                        {product?.tagline || "Loading..."}
                     </h1>
-                    <p className="text-white/80 text-base md:text-lg leading-relaxed max-w-md mx-auto md:mx-0">{product.description}</p>
+                    <p className="text-white/80 text-sm md:text-lg leading-relaxed max-w-md mx-auto md:mx-0">{product?.description || ""}</p>
                 </div>
 
                 {/* Center Column - Product Image */}
-                <div className="flex flex-col items-center justify-center flex-1 order-first md:order-none">
+                <div className="flex flex-col items-center justify-end md:justify-center flex-1 order-first md:order-none mt-2 md:mt-0 pb-8 md:pb-0">
                     {/* Product Image */}
                     <div className="relative flex items-center justify-center w-64 h-64 md:w-96 md:h-96">
-                        <div className="absolute text-6xl md:text-9xl font-black text-white/50 select-none tracking-tighter -translate-y-8 md:-translate-y-16" style={{ fontSize: 'clamp(8rem, 15vw, 16rem)', lineHeight: '1' }}>
-                            {product.show}
+                        <div className="absolute text-9xl md:text-9xl font-black text-white/50 select-none tracking-tighter -translate-y-12 md:-translate-y-16" style={{ fontSize: 'clamp(8rem, 18vw, 14rem)', lineHeight: '1' }}>
+                            {product?.show || ""}
                         </div>
                         <img
-                            src={product.coverImage || "/placeholder.svg"}
-                            alt={product.name}
+                            src={product?.coverImage || "/placeholder.svg"}
+                            alt={product?.name || "Product"}
                             className="w-full h-full object-contain drop-shadow-2xl animate-fade-in relative z-10"
                         />
                     </div>
                 </div>
 
                 {/* Right Column - Product Actions */}
-                <div className="flex flex-col justify-center space-y-4 md:space-y-6 scale-100 md:scale-90 origin-center md:origin-right w-full md:w-1/4 items-center md:items-start">
-                    <p className="text-white/70 text-xs md:text-sm tracking-widest uppercase">{product.flavor}</p>
+                <div className="flex flex-col justify-center space-y-3 md:space-y-6 scale-100 md:scale-90 origin-center md:origin-right w-full md:w-1/4 items-center md:items-start -mt-4 md:mt-0">
+                    <p className="text-white/70 text-xs md:text-sm tracking-widest uppercase">{product?.flavor || ""}</p>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2 md:space-y-3">
                         <p className="text-white/50 text-xs md:text-sm">Select Color</p>
                         <div className="flex gap-2 md:gap-3 justify-center md:justify-start">
-                            {(product.colors || ["black", "white", "gray"]).map((color, idx) => (
+                            {(product?.colors || ["black", "white", "gray"]).map((color, idx) => (
                                 <button
                                     key={idx}
                                     onClick={() => setSelectedColor(color)}
@@ -501,17 +534,19 @@ export default function Home() {
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 md:gap-3 pt-2 md:pt-4 w-full max-w-xs">
-                        <button
+                    <div className="flex flex-col gap-2.5 md:gap-3 pt-2 md:pt-4 w-full max-w-xs px-4 md:px-0">
+                        <LoadingButton
                             onClick={addToCart}
-                            className="bg-white text-gray-900 px-5 py-2.5 md:px-6 md:py-3 rounded-full font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 text-xs md:text-sm"
+                            isLoading={isAddingToCart}
+                            loadingText="Adding..."
+                            className="bg-white text-gray-900 px-6 py-3.5 md:px-6 md:py-3 rounded-full font-bold hover:opacity-90 transition flex items-center justify-center gap-2 text-base md:text-sm shadow-lg"
                         >
-                            <ShoppingCart size={16} className="md:w-[18px] md:h-[18px]" />
+                            <ShoppingCart size={20} className="md:w-[18px] md:h-[18px]" />
                             Add to Cart
-                        </button>
+                        </LoadingButton>
                         <button 
                             onClick={handleCheckout}
-                            className="bg-white text-gray-900 px-5 py-2.5 md:px-6 md:py-3 rounded-full font-semibold hover:opacity-90 transition flex items-center justify-center gap-2 text-xs md:text-sm"
+                            className="bg-white text-gray-900 px-6 py-3.5 md:px-6 md:py-3 rounded-full font-bold hover:opacity-90 transition flex items-center justify-center gap-2 text-base md:text-sm shadow-lg"
                         >
                             Checkout →
                         </button>
@@ -550,7 +585,6 @@ export default function Home() {
                     ))}
                 </div>
             )}
-            </div>
 
             {/* Footer Section - Appears after scrolling past all products */}
             {!scrollLocked && (
@@ -560,6 +594,7 @@ export default function Home() {
                     setScrollLocked={setScrollLocked} 
                 />
             )}
+            </div>
         </div>
     );
 }

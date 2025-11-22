@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ChevronRight, Calendar, CreditCard, Truck } from "lucide-react";
+import { Package, ChevronRight, Calendar, CreditCard, Truck, ArrowLeft, Home } from "lucide-react";
 import { getUserOrders } from "../utils/order";
 import { toast } from "react-toastify";
+import { OrdersPageSkeleton } from "./Skeleton";
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
@@ -49,18 +50,30 @@ export default function Orders() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
-      </div>
-    );
+    return <OrdersPageSkeleton />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
+        {/* Header with Navigation */}
         <div className="mb-8">
+          <div className="flex items-center gap-4 mb-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
+            >
+              <ArrowLeft size={20} />
+              <span className="text-sm font-medium">Back</span>
+            </button>
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition ml-2"
+            >
+              <Home size={20} />
+              <span className="text-sm font-medium">Home</span>
+            </button>
+          </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">My Orders</h1>
           <p className="text-gray-600">View your recent orders from the last 15 days</p>
         </div>
