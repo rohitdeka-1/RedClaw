@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, User, Phone } from "lucide-react";
-import { signupUser } from "../utils/auth";
+import { toast } from 'react-toastify';
+import axiosInstance from "../utils/axios";
+import OTPVerification from "./OTPVerification";
 
 export default function Register() {
     const navigate = useNavigate();
@@ -15,33 +17,53 @@ export default function Register() {
         confirmPassword: ""
     });
     const [loading, setLoading] = useState(false);
+    const [otpSent, setOtpSent] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (formData.password !== formData.confirmPassword) {
-            alert("Passwords do not match!");
+            toast.error("Passwords do not match!");
             return;
         }
 
         if (formData.password.length < 6) {
-            alert("Password must be at least 6 characters long!");
+            toast.error("Password must be at least 6 characters long!");
             return;
         }
 
         setLoading(true);
 
         try {
-            const response = await signupUser(formData.name, formData.email, formData.password);
-            console.log("Registration successful:", response);            
-            // Navigate to home (user is already logged in after signup)
-            navigate("/");
+            // Send registration request - this will send OTP email
+            const response = await axiosInstance.post("/auth/signup", {
+                name: formData.name,
+                email: formData.email,
+                password: formData.password
+            });
+            
+            toast.success(response.data.message || "OTP sent to your email!");
+            setOtpSent(true);
 
         } catch (error) {
             console.error("Registration error:", error);
+            toast.error(error.response?.data?.message || "Registration failed. Please try again.");
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleVerificationSuccess = (userData) => {
+        // Store user data in localStorage
+        localStorage.setItem("user", JSON.stringify(userData));
+        localStorage.setItem("isLoggedIn", "true");
+        
+        // Navigate to home page
+        navigate("/");
+    };
+
+    const handleBackToRegister = () => {
+        setOtpSent(false);
     };
 
     return (
@@ -62,14 +84,17 @@ export default function Register() {
                         onClick={() => navigate("/")}
                     />
                     <h1 className="text-gray-900 text-2xl font-semibold mb-1" style={{ fontFamily: 'Audiowide, sans-serif' }}>
-                        Create Account
+                        {otpSent ? "Verify Email" : "Create Account"}
                     </h1>
-                    <p className="text-gray-500 text-sm">Sign up to get started</p>
+                    <p className="text-gray-500 text-sm">
+                        {otpSent ? "Enter the OTP sent to your email" : "Sign up to get started"}
+                    </p>
                 </div>
 
                 {/* Form Card */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    {!otpSent ? (
+                        <form onSubmit={handleSubmit} className="space-y-4">
                         {/* Full Name */}
                         <div>
                             <label className="text-gray-700 text-sm font-medium mb-1.5 block">
@@ -180,29 +205,40 @@ export default function Register() {
                             disabled={loading}
                             className="w-full bg-gray-900 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
                         >
-                            {loading ? "Creating account..." : "Create account"}
+                            {loading ? "Sending OTP..." : "Send OTP"}
                         </button>
                     </form>
+                    ) : (
+                        <OTPVerification 
+                            email={formData.email}
+                            onVerificationSuccess={handleVerificationSuccess}
+                            onBack={handleBackToRegister}
+                        />
+                    )}
 
-                    {/* Divider */}
-                    <div className="flex items-center gap-3 my-5">
-                        <div className="flex-1 h-px bg-gray-200"></div>
-                        <span className="text-gray-400 text-xs">or</span>
-                        <div className="flex-1 h-px bg-gray-200"></div>
-                    </div>
+                    {!otpSent && (
+                        <>
+                            {/* Divider */}
+                            <div className="flex items-center gap-3 my-5">
+                                <div className="flex-1 h-px bg-gray-200"></div>
+                                <span className="text-gray-400 text-xs">or</span>
+                                <div className="flex-1 h-px bg-gray-200"></div>
+                            </div>
 
-                    {/* Login Link */}
-                    <div className="text-center">
-                        <p className="text-gray-600 text-sm">
-                            Already have an account?{" "}
-                            <Link 
-                                to="/login" 
-                                className="text-purple-600 hover:text-purple-700 font-medium transition-colors"
-                            >
-                                Sign in
-                            </Link>
-                        </p>
-                    </div>
+                            {/* Login Link */}
+                            <div className="text-center">
+                                <p className="text-gray-600 text-sm">
+                                    Already have an account?{" "}
+                                    <Link 
+                                        to="/login" 
+                                        className="text-purple-600 hover:text-purple-700 font-medium transition-colors"
+                                    >
+                                        Sign in
+                                    </Link>
+                                </p>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Back to Home */}
@@ -214,6 +250,8 @@ export default function Register() {
                         <span className="group-hover:-translate-x-0.5 transition-transform">←</span> Back to home
                     </button>
                 </div>
+
+
             </div>
         </div>
     );

@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import router from "./routes/index.js";
 import { connectDb } from "./database/db.js";
 import envConfig from './config/env.config.js';
+import { startCleanupJob } from './jobs/cleanupUnverified.js';
 dotenv.config();
 
 
@@ -33,6 +34,9 @@ app.use("/api/v1", router);
 
 
 connectDb().then(() => {
+    // Start cleanup job after database connection
+    startCleanupJob();
+    
     app.listen(PORT, () => {
         console.log(`Server running : http://localhost:${PORT}`);
     });

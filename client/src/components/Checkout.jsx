@@ -3,6 +3,7 @@ import { ShoppingCart, Plus, Check, ArrowLeft, Lock, Minus, X } from "lucide-rea
 import { isAuthenticated } from "../utils/auth"
 import { getCartItems, updateCartQuantity, removeFromCart } from "../utils/cart"
 import { getAddresses, addAddress, deleteAddress, setDefaultAddress } from "../utils/address"
+import { toast } from 'react-toastify'
 
 // Product IDs for mapping UI data
 const productIds = {
@@ -118,7 +119,7 @@ export default function Checkout() {
         await loadCartFromServer();
       } catch (error) {
         console.error("Error updating quantity:", error);
-        alert("Failed to update quantity");
+        toast.error("Failed to update quantity");
       }
     } else {
       const updatedCart = cart.map(item =>
@@ -136,9 +137,10 @@ export default function Checkout() {
       try {
         await removeFromCart(itemId);
         await loadCartFromServer();
+        toast.success("Item removed from cart");
       } catch (error) {
         console.error("Error removing item:", error);
-        alert("Failed to remove item");
+        toast.error("Failed to remove item");
       }
     } else {
       const updatedCart = cart.filter(item => item._id !== itemId && item.id !== itemId);
@@ -155,7 +157,7 @@ export default function Checkout() {
     e.preventDefault();
     
     if (!isLoggedIn) {
-      alert("Please login to save addresses");
+      toast.error("Please login to save addresses");
       return;
     }
 
@@ -179,16 +181,17 @@ export default function Checkout() {
         country: "India",
         isDefault: false,
       });
+      toast.success("Address added successfully!");
     } catch (error) {
       console.error("Error adding address:", error);
-      alert("Failed to add address. Please try again.");
+      toast.error("Failed to add address. Please try again.");
     }
   };
 
   const handleDeleteAddress = async (addressId) => {
     if (!isLoggedIn) return;
     
-    if (confirm("Are you sure you want to delete this address?")) {
+    if (window.confirm("Are you sure you want to delete this address?")) {
       try {
         const result = await deleteAddress(addressId);
         setAddresses(result.addresses);
@@ -197,9 +200,10 @@ export default function Checkout() {
         if (selectedAddress === addressId) {
           setSelectedAddress(null);
         }
+        toast.success("Address deleted successfully!");
       } catch (error) {
         console.error("Error deleting address:", error);
-        alert("Failed to delete address. Please try again.");
+        toast.error("Failed to delete address. Please try again.");
       }
     }
   };
@@ -210,9 +214,10 @@ export default function Checkout() {
     try {
       const result = await setDefaultAddress(addressId);
       setAddresses(result.addresses);
+      toast.success("Default address updated!");
     } catch (error) {
       console.error("Error setting default address:", error);
-      alert("Failed to set default address. Please try again.");
+      toast.error("Failed to set default address. Please try again.");
     }
   };
 

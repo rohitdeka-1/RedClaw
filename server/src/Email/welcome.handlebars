@@ -18,25 +18,32 @@
         .container {
             max-width: 600px;
             margin: 0 auto;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #ffffff;
             border-radius: 15px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
         }
         .header {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 30px;
+            background: #ffffff;
+            padding: 40px 30px 30px;
             text-align: center;
-            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
         }
         .header h1 {
-            color: #ffffff;
-            font-size: 32px;
-            margin-bottom: 10px;
+            color: #111827;
+            font-size: 28px;
+            margin-bottom: 8px;
+            font-weight: 600;
         }
         .header p {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 16px;
+            color: #6b7280;
+            font-size: 15px;
         }
         .content {
             padding: 40px 30px;
@@ -57,13 +64,14 @@
             line-height: 1.6;
         }
         .user-info {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
             padding: 25px;
             border-radius: 10px;
             margin: 20px 0;
         }
         .user-info h3 {
-            color: #ffffff;
+            color: #111827;
             margin-bottom: 15px;
             font-size: 18px;
         }
@@ -71,17 +79,18 @@
             display: flex;
             justify-content: space-between;
             padding: 10px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-            color: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            color: #374151;
         }
         .info-row:last-child {
             border-bottom: none;
         }
         .info-label {
             font-weight: 600;
+            color: #111827;
         }
         .info-value {
-            color: rgba(255, 255, 255, 0.9);
+            color: #6b7280;
         }
         .features {
             margin: 30px 0;
@@ -97,13 +106,13 @@
             gap: 15px;
         }
         .feature-item {
-            background: #f8f9fa;
+            background: #f9fafb;
             padding: 15px;
             border-radius: 8px;
-            border-left: 4px solid #667eea;
+            border-left: 3px solid #111827;
         }
         .feature-item strong {
-            color: #667eea;
+            color: #111827;
             display: block;
             margin-bottom: 5px;
         }
@@ -117,17 +126,17 @@
         }
         .cta-button a {
             display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #111827;
             color: #ffffff;
             padding: 15px 40px;
             text-decoration: none;
-            border-radius: 50px;
+            border-radius: 8px;
             font-weight: 600;
             font-size: 16px;
-            transition: transform 0.3s ease;
+            transition: background 0.3s ease;
         }
         .cta-button a:hover {
-            transform: translateY(-2px);
+            background: #1f2937;
         }
         .footer {
             background: #f8f9fa;
@@ -146,7 +155,7 @@
         .footer .social-links a {
             display: inline-block;
             margin: 0 10px;
-            color: #667eea;
+            color: #111827;
             text-decoration: none;
             font-weight: 600;
         }
@@ -167,7 +176,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 RedClaw</h1>
+            <img src="{{frontendUrl}}/temp.png" alt="RedClaw Logo" class="logo">
+            <h1>RedClaw</h1>
             <p>Your Premium E-Commerce Platform</p>
         </div>
 

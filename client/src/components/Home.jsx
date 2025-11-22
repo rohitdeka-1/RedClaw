@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, ShoppingCart } from "lucide-react";
+import { ChevronDown, ShoppingCart, User, Package, LogOut } from "lucide-react";
 import { isAuthenticated, getUserFromStorage, logoutUser } from "../utils/auth";
 import { getCartItems, addToCartAPI, clearCart as clearServerCart } from "../utils/cart";
 import axiosInstance from "../utils/axios";
 import Footer from "./Footer";
+import { toast } from 'react-toastify';
 
 // UI-only data for the 3 products (bgColor, logo, etc.)
 const productUIData = {
@@ -50,6 +51,9 @@ export default function Home() {
     const lastScrollTime = useRef(0);
     const [scrollLocked, setScrollLocked] = useState(true);
     const isTransitioning = useRef(false);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const dropdownRef = useRef(null);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
 
     const product = products[currentProduct] || {};
 
@@ -65,6 +69,8 @@ export default function Home() {
                 setProducts(fetchedProducts);
                 setSelectedColor(fetchedProducts[0]?.colors?.[0] || "black");
                 setLoading(false);
+                // Disable initial load flag after a brief moment
+                setTimeout(() => setIsInitialLoad(false), 100);
             } catch (error) {
                 console.error("Error fetching products:", error);
                 setLoading(false);
@@ -125,12 +131,12 @@ export default function Home() {
                 if (e.deltaY < 0 && window.scrollY <= 0) {
                     e.preventDefault();
                     setScrollLocked(true);
-                    // When coming back from footer, stay on the last product
-                    // Don't immediately transition
+                    // When coming back from footer, allow immediate scrolling
+                    // Just a brief delay to ensure smooth re-lock
                     isTransitioning.current = true;
                     setTimeout(() => {
                         isTransitioning.current = false;
-                    }, 700); // Reduced from 1200ms to 700ms for better feel
+                    }, 300); // Reduced to 300ms for immediate response
                 }
                 return;
             }
@@ -151,7 +157,7 @@ export default function Home() {
             e.preventDefault();
             const now = Date.now();
             
-            // Reduced delay from 800ms to 500ms for faster response
+            // Throttle scroll events
             if (now - lastScrollTime.current < 500) return;
             lastScrollTime.current = now;
 
@@ -192,6 +198,18 @@ export default function Home() {
         }
     }, [currentProduct, product.colors]);
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     if (loading || products.length === 0) {
         return (
             <div className="min-h-screen w-full flex items-center justify-center bg-gray-900">
@@ -202,7 +220,7 @@ export default function Home() {
 
     const addToCart = async () => {
         if (!isLoggedIn) {
-            alert("Please login to add items to cart");
+            toast.error("Please login to add items to cart");
             navigate("/login");
             return;
         }
@@ -210,25 +228,25 @@ export default function Home() {
         try {
             await addToCartAPI(product._id);
             await loadCartFromServer();
-            alert("Added to cart!");
+            toast.success("Added to cart!");
         } catch (error) {
             console.error("Error adding to cart:", error);
             if (error.response?.status === 401) {
-                alert("Session expired. Please log in again.");
+                toast.error("Session expired. Please log in again.");
                 setIsLoggedIn(false);
                 setUser(null);
                 localStorage.removeItem("user");
                 localStorage.removeItem("isLoggedIn");
                 navigate("/login");
             } else {
-                alert("Failed to add to cart. Please try again.");
+                toast.error("Failed to add to cart. Please try again.");
             }
         }
     };
 
     const handleCheckout = () => {
         if (cart.length === 0) {
-            alert("Your cart is empty!");
+            toast.warning("Your cart is empty!");
             return;
         }
         navigate("/checkout");
@@ -240,12 +258,14 @@ export default function Home() {
             setIsLoggedIn(false);
             setUser(null);
             setCart([]);
-            alert("Logged out successfully!");
+            setShowDropdown(false);
+            toast.success("Logged out successfully!");
         } catch (error) {
             console.error("Logout error:", error);
             setIsLoggedIn(false);
             setUser(null);
             setCart([]);
+            toast.error("Logout failed, but you've been signed out locally.");
         }
     };
 
@@ -261,7 +281,7 @@ export default function Home() {
         <div className="min-h-screen w-full">
             <div
                 ref={containerRef}
-                className={`min-h-screen w-full transition-all duration-1000 relative ${scrollLocked ? 'overflow-hidden' : 'overflow-auto'}`}
+                className={`min-h-screen w-full relative ${scrollLocked ? 'overflow-hidden' : 'overflow-auto'} ${!isInitialLoad ? 'transition-all duration-1000' : ''}`}
                 style={{
                     background: `radial-gradient(circle at center, ${product.midColor} 0%, ${product.bgColor} 100%)`,
                 }}
@@ -273,20 +293,74 @@ export default function Home() {
                             <img src={product.logo} alt="RedClaw Logo" className="h-10 md:h-16 object-contain" />
                         </div>
                         <div className="flex items-center gap-3 md:gap-8">
-                            <div className="hidden md:flex gap-6 text-white">
+                            <div className="hidden md:flex gap-6 text-white items-center">
                                 <a href="#" className="hover:opacity-80 transition">
                                     Contact
                                 </a>
-                                <button onClick={handleCheckout} className="hover:opacity-80 transition">
-                                    Cart ({cart.length})
+                                <button onClick={handleCheckout} className="hover:opacity-80 transition relative">
+                                    <ShoppingCart size={24} />
+                                    {cart.length > 0 && (
+                                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                            {cart.length}
+                                        </span>
+                                    )}
                                 </button>
                             </div>
-                            <button 
-                                onClick={handleAuthAction}
-                                className="bg-white text-gray-900 px-4 py-1.5 md:px-6 md:py-2 rounded-full font-semibold hover:opacity-90 transition text-sm md:text-base"
-                            >
-                                {isLoggedIn ? (user?.name || "Logout") : "Login"}
-                            </button>
+                            {isLoggedIn ? (
+                                <div className="relative" ref={dropdownRef}>
+                                    <button 
+                                        onClick={() => setShowDropdown(!showDropdown)}
+                                        onMouseEnter={() => setShowDropdown(true)}
+                                        className="bg-white text-gray-900 px-3 py-1.5 md:px-3 md:py-2 rounded-full font-semibold hover:opacity-90 transition text-sm md:text-base flex items-center gap-2"
+                                    >
+                                        {user?.name || "Account"}
+                                        <ChevronDown size={16} className={`transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    
+                                    {showDropdown && (
+                                        <div 
+                                            className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100"
+                                            onMouseLeave={() => setShowDropdown(false)}
+                                        >
+                                            <button
+                                                onClick={() => {
+                                                    setShowDropdown(false);
+                                                    navigate('/account');
+                                                }}
+                                                className="w-full px-4 py-3 text-left text-gray-700 hover:bg-gray-50 transition flex items-center gap-3"
+                                            >
+                                                <User size={18} />
+                                                <span className="font-medium">My Account</span>
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setShowDropdown(false);
+                                                    navigate('/orders');
+                                                }}
+                                                className="w-full px-4 py-3 text-left text-gray-700 hover:bg-gray-50 transition flex items-center gap-3"
+                                            >
+                                                <Package size={18} />
+                                                <span className="font-medium">Order History</span>
+                                            </button>
+                                            <div className="border-t border-gray-100 my-1"></div>
+                                            <button
+                                                onClick={handleLogout}
+                                                className="w-full px-4 py-3 text-left text-red-600 hover:bg-red-50 transition flex items-center gap-3"
+                                            >
+                                                <LogOut size={18} />
+                                                <span className="font-medium">Logout</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => navigate("/login")}
+                                    className="bg-white text-gray-900 px-4 py-1.5 md:px-6 md:py-2 rounded-full font-semibold hover:opacity-90 transition text-sm md:text-base"
+                                >
+                                    Login
+                                </button>
+                            )}
                         </div>
                     </nav>
                 </div>
