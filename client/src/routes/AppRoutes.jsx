@@ -6,6 +6,7 @@ import Login from '../components/Login.jsx';
 import Register from '../components/Register.jsx';
 import Orders from '../components/Orders.jsx';
 import OrderDetails from '../components/OrderDetails.jsx';
+import Account from '../components/Account.jsx';
 import ProtectedRoute from '../components/ProtectedRoute.jsx';
 
 export default function AppRoutes() {
@@ -25,6 +26,11 @@ export default function AppRoutes() {
       <Route path='/orders/:orderId' element={
         <ProtectedRoute>
           <OrderDetails />
+        </ProtectedRoute>
+      } />
+      <Route path='/account' element={
+        <ProtectedRoute>
+          <Account />
         </ProtectedRoute>
       } />
       <Route path='/login' element={<Login />} />
