@@ -199,35 +199,58 @@ export default function Home() {
         };
 
         const handleTouchEnd = (e) => {
+            if (!touchStartY) return;
+            
             touchEndY = e.changedTouches[0].clientY;
             const swipeDistance = touchStartY - touchEndY;
             const minSwipeDistance = 50; // Minimum swipe distance in pixels
 
-            if (Math.abs(swipeDistance) < minSwipeDistance) return;
+            if (Math.abs(swipeDistance) < minSwipeDistance) {
+                touchStartY = null;
+                return;
+            }
 
             // If scroll is unlocked, check for re-lock
             if (!scrollLocked) {
-                if (swipeDistance < 0 && window.scrollY <= 0) {
-                    setScrollLocked(true);
-                    isTransitioning.current = true;
+                if (swipeDistance < 0 && window.scrollY <= 10) {
+                    e.preventDefault();
+                    // Smooth scroll to top first
+                    window.scrollTo({ top: 0, behavior: 'instant' });
+                    // Then lock after a brief delay
                     setTimeout(() => {
+                        setScrollLocked(true);
+                        setCurrentProduct(products.length - 1);
                         isTransitioning.current = false;
-                    }, 300);
+                    }, 50);
                 }
+                touchStartY = null;
                 return;
             }
 
             // Prevent action if currently transitioning
-            if (isTransitioning.current) return;
+            if (isTransitioning.current) {
+                touchStartY = null;
+                return;
+            }
 
             // If at last product and swiping up (scrolling down), unlock scroll
             if (currentProduct === products.length - 1 && swipeDistance > 0) {
+                isTransitioning.current = true;
                 setScrollLocked(false);
+                // Smooth scroll to reveal footer
+                setTimeout(() => {
+                    window.scrollTo({ top: window.innerHeight, behavior: 'smooth' });
+                    isTransitioning.current = false;
+                }, 100);
+                touchStartY = null;
                 return;
             }
 
             const now = Date.now();
-            if (now - lastScrollTime.current < 500) return;
+            if (now - lastScrollTime.current < 500) {
+                touchStartY = null;
+                return;
+            }
             lastScrollTime.current = now;
 
             if (swipeDistance > 0) {
@@ -249,6 +272,8 @@ export default function Home() {
                     }, 600);
                 }
             }
+            
+            touchStartY = null;
         };
 
         const container = containerRef.current;
@@ -266,6 +291,32 @@ export default function Home() {
             };
         }
     }, [currentProduct, products.length, scrollLocked]);
+
+    // Handle smooth scroll re-locking when scrolling back from footer
+    useEffect(() => {
+        let scrollTimeout;
+        const handleScroll = () => {
+            if (!scrollLocked && window.scrollY <= 5) {
+                // Clear any existing timeout
+                if (scrollTimeout) clearTimeout(scrollTimeout);
+                
+                // User scrolled back to top, re-lock smoothly after a brief delay
+                scrollTimeout = setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'instant' });
+                    setScrollLocked(true);
+                    setCurrentProduct(products.length - 1);
+                }, 150);
+            }
+        };
+
+        if (!scrollLocked) {
+            window.addEventListener('scroll', handleScroll, { passive: true });
+            return () => {
+                window.removeEventListener('scroll', handleScroll);
+                if (scrollTimeout) clearTimeout(scrollTimeout);
+            };
+        }
+    }, [scrollLocked, products.length]);
 
     // Update selected color when product changes
     useEffect(() => {
@@ -388,7 +439,7 @@ export default function Home() {
             
             <div
                 ref={containerRef}
-                className={`min-h-screen w-full relative ${scrollLocked ? 'overflow-hidden' : 'overflow-auto'} ${!isInitialLoad ? 'transition-all duration-1000' : ''}`}
+                className={`min-h-screen w-full relative ${scrollLocked ? 'overflow-hidden fixed inset-0' : 'overflow-auto'} transition-all duration-500`}
                 style={{
                     background: `radial-gradient(circle at center, ${product?.midColor || '#0f172a'} 0%, ${product?.bgColor || '#9ca3af'} 100%)`,
                 }}
@@ -488,18 +539,18 @@ export default function Home() {
             {/* Main Content - Centered - Adjusted for better mobile spacing */}
             <div className="flex flex-col md:flex-row min-h-[calc(100vh-220px)] md:min-h-[calc(100vh-200px)] items-center justify-between px-4 md:px-8 gap-4 md:gap-0 -mt-8 md:mt-0">
                 {/* Left Column - Product Info */}
-                <div className="flex flex-col justify-center w-full md:w-1/4 text-center md:text-left mb-4 md:mb-0">
-                    <h1 className="text-3xl md:text-5xl font-black text-white mb-2 md:mb-4 leading-tight">
+                <div className="flex flex-col justify-center w-full md:w-1/4 text-center md:text-left mb-4 md:mb-0 min-h-[120px]">
+                        <h1 className="text-3xl md:text-5xl font-black text-white mb-2 md:mb-4 leading-tight">
                         {product?.tagline || "Loading..."}
                     </h1>
                     <p className="text-white/80 text-sm md:text-lg leading-relaxed max-w-md mx-auto md:mx-0">{product?.description || ""}</p>
                 </div>
 
                 {/* Center Column - Product Image */}
-                <div className="flex flex-col items-center justify-end md:justify-center flex-1 order-first md:order-none mt-2 md:mt-0 pb-8 md:pb-0">
+                <div className="flex flex-col items-center justify-end flex-1 order-first md:order-none mt-8 md:mt-0">
                     {/* Product Image */}
-                    <div className="relative flex items-center justify-center w-64 h-64 md:w-96 md:h-96">
-                        <div className="absolute text-9xl md:text-9xl font-black text-white/50 select-none tracking-tighter -translate-y-12 md:-translate-y-16" style={{ fontSize: 'clamp(8rem, 18vw, 14rem)', lineHeight: '1' }}>
+                    <div className="relative flex items-center justify-center w-56 h-48 md:w-96 md:h-96">
+                        <div className="absolute text-9xl md:text-9xl mt-10 font-black text-white/50 select-none tracking-tighter -translate-y-12 md:-translate-y-24" style={{ fontSize: 'clamp(8rem, 18vw, 14rem)', lineHeight: '1' }}>
                             {product?.show || ""}
                         </div>
                         <img
@@ -574,7 +625,7 @@ export default function Home() {
 
             {/* Product Navigation Dots - Right */}
             {scrollLocked && (
-                <div className="fixed right-4 md:right-8 top-1/2 transform -translate-y-1/2 flex flex-col gap-3 md:gap-4">
+                <div className="fixed right-4 md:right-8 top-1/2 transform -translate-y-1/2 flex flex-col gap-3 md:gap-4 z-40">
                     {products.map((_, idx) => (
                         <button
                             key={idx}
@@ -585,16 +636,18 @@ export default function Home() {
                     ))}
                 </div>
             )}
+        </div>
 
-            {/* Footer Section - Appears after scrolling past all products */}
+            {/* Footer Section - Below main container, appears when unlocked */}
             {!scrollLocked && (
-                <Footer 
-                    products={products} 
-                    setCurrentProduct={setCurrentProduct} 
-                    setScrollLocked={setScrollLocked} 
-                />
+                <div className="w-full">
+                    <Footer 
+                        products={products} 
+                        setCurrentProduct={setCurrentProduct} 
+                        setScrollLocked={setScrollLocked} 
+                    />
+                </div>
             )}
-            </div>
         </div>
     );
 }
