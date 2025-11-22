@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { loginUser } from "../utils/auth";
+import { toast } from "react-toastify";
 
 export default function Login() {
     const navigate = useNavigate();
@@ -21,7 +22,7 @@ export default function Login() {
             console.log("Login successful:", response);
             
             // Show success message
-            
+            toast.success(response.message);    
             
             // Navigate to home
             navigate("/");
@@ -34,31 +35,57 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 flex items-center justify-center p-4">
-            {/* Subtle Pattern Overlay */}
-            <div className="absolute inset-0 opacity-[0.02]" style={{
-                backgroundImage: 'radial-gradient(circle at 1px 1px, rgb(0 0 0) 1px, transparent 0)',
-                backgroundSize: '24px 24px'
-            }}></div>
-
-            <div className="relative w-full max-w-md">
-                {/* Logo */}
-                <div className="text-center mb-8">
+        <div className="min-h-screen w-full bg-white flex">
+            {/* Left Side - Branding */}
+            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-gray-900 to-gray-800 p-12 flex-col justify-between relative overflow-hidden">
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-5" style={{
+                    backgroundImage: 'radial-gradient(circle at 2px 2px, rgb(255 255 255) 1px, transparent 0)',
+                    backgroundSize: '32px 32px'
+                }}></div>
+                
+                {/* Content */}
+                <div className="relative z-10">
                     <img 
                         src="/logo.png" 
                         alt="RedClaw" 
-                        className="h-12 mx-auto mb-4 cursor-pointer hover:opacity-80 transition-opacity"
+                        className="h-12 mb-8 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => navigate("/")}
                     />
-                    <h1 className="text-gray-900 text-2xl font-semibold mb-1" style={{ fontFamily: 'Audiowide, sans-serif' }}>
+                    <h1 className="text-white text-5xl font-bold mb-4" style={{ fontFamily: 'Audiowide, sans-serif' }}>
                         Welcome Back
                     </h1>
-                    <p className="text-gray-500 text-sm">Sign in to your account</p>
+                    <p className="text-gray-300 text-lg max-w-md">
+                        Sign in to access your account and continue your premium shopping experience.
+                    </p>
                 </div>
 
-                {/* Form Card */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Footer */}
+                <div className="relative z-10">
+                    <p className="text-gray-400 text-sm">© 2024 RedClaw. All rights reserved.</p>
+                </div>
+            </div>
+
+            {/* Right Side - Form */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+                <div className="w-full max-w-md">
+                    {/* Mobile Logo */}
+                    <div className="lg:hidden text-center mb-8">
+                        <img 
+                            src="/logo.png" 
+                            alt="RedClaw" 
+                            className="h-10 mx-auto mb-4 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => navigate("/")}
+                        />
+                        <h1 className="text-gray-900 text-2xl font-semibold mb-2" style={{ fontFamily: 'Audiowide, sans-serif' }}>
+                            Welcome Back
+                        </h1>
+                        <p className="text-gray-500">Sign in to your account</p>
+                    </div>
+
+                    {/* Form Card */}
+                    <div className="bg-white">
+                        <form onSubmit={handleSubmit} className="space-y-4">
                         {/* Email */}
                         <div>
                             <label className="text-gray-700 text-sm font-medium mb-1.5 block">
@@ -152,6 +179,7 @@ export default function Login() {
                         <span className="group-hover:-translate-x-0.5 transition-transform">←</span> Back to home
                     </button>
                 </div>
+            </div>
             </div>
         </div>
     );

@@ -1,12 +1,14 @@
 import Coupon from "../models/Coupon.model.js";
 import Order from "../models/Order.model.js";
 import { User } from "../models/User.model.js";
+import {Product} from "../models/Product.model.js";
 import { razorpay } from "../lib/razorpay.js";
+import { transporter } from "../services/mailer.services.js";
 import crypto from "crypto";
 
 export const createCheckoutSession = async (req, res) => {
 	try {
-		const { products, couponCode, addressId } = req.body;
+		const { products, couponCode, addressId, billingAddressId } = req.body;
 
 		if (!Array.isArray(products) || products.length === 0) {
 			return res.status(400).json({ error: "Invalid or empty products array" });
@@ -17,11 +19,28 @@ export const createCheckoutSession = async (req, res) => {
 			return res.status(400).json({ error: "Shipping address is required" });
 		}
 
+		// Validate billing address
+		if (!billingAddressId) {
+			return res.status(400).json({ error: "Billing address is required" });
+		}
+
 		const user = await User.findById(req.user._id);
 		const shippingAddress = user.addresses.id(addressId);
 
 		if (!shippingAddress) {
-			return res.status(404).json({ error: "Address not found" });
+			return res.status(404).json({ error: "Shipping address not found" });
+		}
+
+		// Validate billing address (can be same as shipping or from billingAddresses)
+		let billingAddress;
+		if (billingAddressId === addressId) {
+			// Same as shipping address
+			billingAddress = shippingAddress;
+		} else {
+			billingAddress = user.billingAddresses.id(billingAddressId);
+			if (!billingAddress) {
+				return res.status(404).json({ error: "Billing address not found" });
+			}
 		}
 
 		let totalAmount = 0;
@@ -45,16 +64,19 @@ export const createCheckoutSession = async (req, res) => {
 		// (smallest currency unit)
 		const amountInPaise = Math.round(totalAmount * 100);
 
-		// Create Razorpay order
+		// Create Razorpay order with short receipt (max 40 chars)
+		const shortReceipt = `ord_${Date.now().toString().slice(-10)}`;
+
 		const razorpayOrder = await razorpay.orders.create({
 			amount: amountInPaise,
 			currency: "INR",  
-			receipt: `order_${req.user._id}_${Date.now()}`,
+			receipt: shortReceipt,
 			notes: {
 				userId: req.user._id.toString(),
 				couponCode: couponCode || "",
 				discountAmount: discountAmount,
 				addressId: addressId,
+				billingAddressId: billingAddressId,
 				products: JSON.stringify(
 					products.map((p) => ({
 						id: p._id,
@@ -114,6 +136,18 @@ export const checkoutSuccess = async (req, res) => {
 				return res.status(404).json({ message: "Shipping address not found" });
 			}
 
+			// Get billing address
+			let billingAddress;
+			if (razorpayOrder.notes.billingAddressId === razorpayOrder.notes.addressId) {
+				// Same as shipping
+				billingAddress = shippingAddress;
+			} else {
+				billingAddress = user.billingAddresses.id(razorpayOrder.notes.billingAddressId);
+				if (!billingAddress) {
+					return res.status(404).json({ message: "Billing address not found" });
+				}
+			}
+
 			// Deactivate coupon if used
 			if (razorpayOrder.notes.couponCode) {
 				await Coupon.findOneAndUpdate(
@@ -147,11 +181,71 @@ export const checkoutSuccess = async (req, res) => {
 					pincode: shippingAddress.pincode,
 					country: shippingAddress.country,
 				},
+				billingAddress: {
+					fullName: billingAddress.fullName,
+					phone: billingAddress.phone,
+					addressLine1: billingAddress.addressLine1,
+					addressLine2: billingAddress.addressLine2,
+					city: billingAddress.city,
+					state: billingAddress.state,
+					pincode: billingAddress.pincode,
+					country: billingAddress.country,
+				},
 				razorpayOrderId: razorpay_order_id,
 				razorpayPaymentId: razorpay_payment_id,
 			});
 
 			await newOrder.save();
+
+			// Fetch product details for email
+			const productDetails = await Promise.all(
+				products.map(async (product) => {
+					const productData = await Product.findById(product.id);
+					return {
+						name: productData?.name || "Product",
+						image: `${process.env.FRONTEND_URL}${productData?.coverImage || "/mouse.png"}`,
+						quantity: product.quantity,
+						price: product.price,
+					};
+				})
+			);
+
+			// Calculate totals for email
+			const subtotal = products.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+			const tax = Math.round(subtotal * 0.18);
+			const discount = razorpayOrder.notes.discountAmount || 0;
+
+			// Send order confirmation email
+			try {
+				await transporter.sendMail({
+					from: `"RedClaw" <${process.env.EMAIL_USER}>`,
+					to: user.email,
+					subject: `Order Confirmation - #${newOrder._id.toString().slice(-8).toUpperCase()}`,
+					template: "orderConfirmation",
+					context: {
+						customerName: user.name,
+						orderId: newOrder._id.toString().slice(-8).toUpperCase(),
+						orderDate: new Date().toLocaleDateString("en-IN", {
+							day: "numeric",
+							month: "long",
+							year: "numeric",
+						}),
+						paymentId: razorpay_payment_id,
+						products: productDetails,
+						shippingAddress: shippingAddress,
+						billingAddress: billingAddress,
+						subtotal: subtotal,
+						tax: tax,
+						discount: discount > 0 ? discount : null,
+						totalAmount: razorpayOrder.amount / 100,
+						frontendUrl: process.env.FRONTEND_URL,
+					},
+				});
+				console.log("Order confirmation email sent to:", user.email);
+			} catch (emailError) {
+				console.error("Error sending order confirmation email:", emailError);
+				// Don't fail the order if email fails
+			}
 
 			res.status(200).json({
 				success: true,

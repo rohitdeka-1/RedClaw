@@ -4,6 +4,8 @@ import Home from '../components/Home.jsx';
 import Checkout from '../components/Checkout.jsx';
 import Login from '../components/Login.jsx';
 import Register from '../components/Register.jsx';
+import Orders from '../components/Orders.jsx';
+import OrderDetails from '../components/OrderDetails.jsx';
 import ProtectedRoute from '../components/ProtectedRoute.jsx';
 
 export default function AppRoutes() {
@@ -13,6 +15,16 @@ export default function AppRoutes() {
       <Route path='/checkout' element={
         <ProtectedRoute>
           <Checkout />
+        </ProtectedRoute>
+      } />
+      <Route path='/orders' element={
+        <ProtectedRoute>
+          <Orders />
+        </ProtectedRoute>
+      } />
+      <Route path='/orders/:orderId' element={
+        <ProtectedRoute>
+          <OrderDetails />
         </ProtectedRoute>
       } />
       <Route path='/login' element={<Login />} />

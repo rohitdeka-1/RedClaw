@@ -8,6 +8,7 @@ import cartRoute from "./cart.route.js";
 import couponRoute from "./coupon.route.js";
 import payRouter from "./payment.route.js";
 import addressRouter from "./address.route.js";
+import billingAddressRouter from "./billingAddress.route.js";
 import orderRouter from "./order.route.js";
 
 const router = Router();
@@ -19,6 +20,7 @@ router.use("/cart",cartRoute);
 router.use("/payment", payRouter);
 router.use("/coupon", couponRoute);
 router.use("/address", addressRouter);
+router.use("/billing-address", billingAddressRouter);
 router.use("/orders", orderRouter);
 
 

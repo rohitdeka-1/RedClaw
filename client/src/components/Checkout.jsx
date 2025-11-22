@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react"
 import { ShoppingCart, Plus, Check, ArrowLeft, Lock, Minus, X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import { isAuthenticated } from "../utils/auth"
 import { getCartItems, updateCartQuantity, removeFromCart } from "../utils/cart"
 import { getAddresses, addAddress, deleteAddress, setDefaultAddress } from "../utils/address"
+import { getBillingAddresses, addBillingAddress, deleteBillingAddress } from "../utils/billingAddress"
+import { createCheckoutSession, verifyPayment } from "../utils/payment"
 import { toast } from 'react-toastify'
 
 // Product IDs for mapping UI data
@@ -46,6 +49,12 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
+  // Billing address states
+  const [billingAddresses, setBillingAddresses] = useState([])
+  const [selectedBillingAddress, setSelectedBillingAddress] = useState(null)
+  const [showBillingForm, setShowBillingForm] = useState(false)
+  const [sameAsShipping, setSameAsShipping] = useState(false)
+
   const [addressForm, setAddressForm] = useState({
     fullName: "",
     phone: "",
@@ -58,6 +67,17 @@ export default function Checkout() {
     isDefault: false,
   })
 
+  const [billingForm, setBillingForm] = useState({
+    fullName: "",
+    phone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    pincode: "",
+    country: "India",
+  })
+
   useEffect(() => {
     const loggedIn = isAuthenticated();
     setIsLoggedIn(loggedIn);
@@ -65,6 +85,7 @@ export default function Checkout() {
     if (loggedIn) {
       loadCartFromServer();
       loadAddressesFromServer();
+      loadBillingAddressesFromServer();
     } else {
       const savedCart = JSON.parse(localStorage.getItem("cart") || "[]");
       
@@ -81,6 +102,25 @@ export default function Checkout() {
       setCart(validCart);
     }
   }, []);
+
+  // Auto-update billing form when shipping address changes and "same as shipping" is checked
+  useEffect(() => {
+    if (sameAsShipping && selectedAddress) {
+      const shippingAddr = addresses.find(addr => addr._id === selectedAddress);
+      if (shippingAddr) {
+        setBillingForm({
+          fullName: shippingAddr.fullName,
+          phone: shippingAddr.phone,
+          addressLine1: shippingAddr.addressLine1,
+          addressLine2: shippingAddr.addressLine2 || "",
+          city: shippingAddr.city,
+          state: shippingAddr.state,
+          pincode: shippingAddr.pincode,
+          country: shippingAddr.country || "India",
+        });
+      }
+    }
+  }, [selectedAddress, sameAsShipping, addresses]);
 
   const loadCartFromServer = async () => {
     try {
@@ -107,6 +147,20 @@ export default function Checkout() {
       }
     } catch (error) {
       console.error("Error loading addresses:", error);
+    }
+  };
+
+  const loadBillingAddressesFromServer = async () => {
+    try {
+      const billingData = await getBillingAddresses();
+      setBillingAddresses(billingData);
+      // Set the first default billing address as selected
+      const defaultBilling = billingData.find(addr => addr.isDefault);
+      if (defaultBilling) {
+        setSelectedBillingAddress(defaultBilling._id);
+      }
+    } catch (error) {
+      console.error("Error loading billing addresses:", error);
     }
   };
 
@@ -221,34 +275,207 @@ export default function Checkout() {
     }
   };
 
-  const handleCheckout = async () => {
+  // Handle "Same as Shipping Address" checkbox
+  const handleSameAsShipping = (checked) => {
+    if (checked && !selectedAddress) {
+      toast.error("Please select a shipping address first");
+      return;
+    }
     
+    setSameAsShipping(checked);
+    
+    if (checked && selectedAddress) {
+      const shippingAddr = addresses.find(addr => addr._id === selectedAddress);
+      if (shippingAddr) {
+        setBillingForm({
+          fullName: shippingAddr.fullName,
+          phone: shippingAddr.phone,
+          addressLine1: shippingAddr.addressLine1,
+          addressLine2: shippingAddr.addressLine2 || "",
+          city: shippingAddr.city,
+          state: shippingAddr.state,
+          pincode: shippingAddr.pincode,
+          country: shippingAddr.country || "India",
+        });
+        setShowBillingForm(false);
+        setSelectedBillingAddress(null);
+      }
+    } else {
+      // Clear billing form when unchecked
+      setBillingForm({
+        fullName: "",
+        phone: "",
+        addressLine1: "",
+        addressLine2: "",
+        city: "",
+        state: "",
+        pincode: "",
+        country: "India",
+      });
+      setSelectedBillingAddress(null);
+    }
+  };
 
-    setLoading(true)
+  const handleBillingFormSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!isLoggedIn) {
+      toast.error("Please login to save billing addresses");
+      return;
+    }
+
+    try {
+      const result = await addBillingAddress(billingForm);
+      await loadBillingAddressesFromServer();
+      
+      // Select the newly added billing address
+      setSelectedBillingAddress(result.address._id);
+      
+      setShowBillingForm(false);
+      setBillingForm({
+        fullName: "",
+        phone: "",
+        addressLine1: "",
+        addressLine2: "",
+        city: "",
+        state: "",
+        pincode: "",
+        country: "India",
+      });
+      toast.success("Billing address added successfully!");
+    } catch (error) {
+      console.error("Error adding billing address:", error);
+      toast.error("Failed to add billing address. Please try again.");
+    }
+  };
+
+  const handleDeleteBillingAddress = async (addressId) => {
+    if (!isLoggedIn) return;
+    
+    if (window.confirm("Are you sure you want to delete this billing address?")) {
+      try {
+        await deleteBillingAddress(addressId);
+        await loadBillingAddressesFromServer();
+        
+        // Clear selection if deleted address was selected
+        if (selectedBillingAddress === addressId) {
+          setSelectedBillingAddress(null);
+        }
+        toast.success("Billing address deleted successfully!");
+      } catch (error) {
+        console.error("Error deleting billing address:", error);
+        toast.error("Failed to delete billing address. Please try again.");
+      }
+    }
+  };
+
+  const handleCheckout = async () => {
+    // Validation: Check if user is logged in
+    if (!isLoggedIn) {
+      toast.error("Please login to proceed with checkout");
+      return;
+    }
+
+    // Validation: Check if cart is not empty
+    if (cart.length === 0) {
+      toast.error("Your cart is empty");
+      return;
+    }
+
+    // Validation: Check if shipping address is selected
+    if (!selectedAddress) {
+      toast.error("Please select a shipping address");
+      return;
+    }
+
+    // Validation: Check if billing address is selected or "same as shipping" is checked
+    if (!sameAsShipping && !selectedBillingAddress) {
+      toast.error("Please select a billing address or check 'Same as shipping address'");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const products = cart.map((item) => ({
-        _id: item.id,
+        _id: item._id || item.id,
         quantity: item.quantity || 1,
         price: item.price || 0,
-      }))
+      }));
 
-      console.log("Processing payment with:", {
+      // Determine billing address ID
+      const billingAddressId = sameAsShipping ? selectedAddress : selectedBillingAddress;
+
+      // Create checkout session
+      const session = await createCheckoutSession(
         products,
-        addressId: selectedAddress,
-        couponCode,
-      })
+        selectedAddress,
+        billingAddressId,
+        couponCode
+      );
 
-      setTimeout(() => {
-        setLoading(false)
-        
-      }, 2000)
+      // Get user data
+      const userData = JSON.parse(localStorage.getItem("user"));
+
+      // Razorpay options
+      const options = {
+        key: session.keyId,
+        amount: session.amount,
+        currency: session.currency,
+        name: "RedClaw",
+        description: "Gaming Mouse Purchase",
+        image: "/temp.png",
+        order_id: session.orderId,
+        handler: async function (response) {
+          try {
+            // Verify payment
+            const verificationResult = await verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            if (verificationResult.success) {
+              toast.success("Payment successful! Order placed.");
+              
+              // Clear cart after successful payment
+              localStorage.setItem("cart", JSON.stringify([]));
+              
+              // Redirect to order confirmation or orders page
+              setTimeout(() => {
+                window.location.href = `/orders`;
+              }, 1500);
+            }
+          } catch (error) {
+            console.error("Payment verification error:", error);
+            toast.error(error.message || "Payment verification failed");
+            setLoading(false);
+          }
+        },
+        prefill: {
+          name: userData?.name || "",
+          email: userData?.email || "",
+          contact: userData?.phone || "",
+        },
+        theme: {
+          color: "#1f2937",
+        },
+        modal: {
+          ondismiss: function () {
+            setLoading(false);
+            toast.info("Payment cancelled");
+          },
+        },
+      };
+
+      const razorpayInstance = new window.Razorpay(options);
+      razorpayInstance.open();
     } catch (error) {
-      console.error("Checkout error:", error)
-       
-      setLoading(false)
+      console.error("Checkout error:", error);
+      toast.error(error.message || "Failed to initiate payment");
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen w-full bg-gray-50">
@@ -439,7 +666,7 @@ export default function Checkout() {
                 {addresses.length === 0 && !showAddressForm ? (
                   <p className="text-gray-500 text-center py-8">No saved addresses yet. Add one to continue.</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                     {addresses.map((address) => (
                       <div
                         key={address._id}
@@ -503,6 +730,193 @@ export default function Checkout() {
                   </div>
                 )}
               </div>
+
+              {/* Billing Address */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-gray-900 text-lg font-bold">Billing Address</h2>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sameAsShipping}
+                        onChange={(e) => handleSameAsShipping(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <span>Same as shipping address</span>
+                    </label>
+                  </div>
+                  {!sameAsShipping && (
+                    <button
+                      onClick={() => setShowBillingForm(!showBillingForm)}
+                      className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition text-sm font-medium"
+                    >
+                      <Plus size={16} />
+                      Add Billing Address
+                    </button>
+                  )}
+                </div>
+
+                {/* Billing Address Form */}
+                {showBillingForm && !sameAsShipping && (
+                  <form
+                    onSubmit={handleBillingFormSubmit}
+                    className="bg-gray-50 p-6 rounded-lg mb-6 space-y-4 border border-gray-200"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        placeholder="Full Name"
+                        value={billingForm.fullName}
+                        onChange={(e) => setBillingForm({ ...billingForm, fullName: e.target.value })}
+                        required
+                        className="bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                      />
+                      <input
+                        type="tel"
+                        placeholder="Phone Number"
+                        value={billingForm.phone}
+                        onChange={(e) => setBillingForm({ ...billingForm, phone: e.target.value })}
+                        required
+                        className="bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Address Line 1"
+                      value={billingForm.addressLine1}
+                      onChange={(e) => setBillingForm({ ...billingForm, addressLine1: e.target.value })}
+                      required
+                      className="w-full bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Address Line 2 (Optional)"
+                      value={billingForm.addressLine2}
+                      onChange={(e) => setBillingForm({ ...billingForm, addressLine2: e.target.value })}
+                      className="w-full bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                    />
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <input
+                        type="text"
+                        placeholder="City"
+                        value={billingForm.city}
+                        onChange={(e) => setBillingForm({ ...billingForm, city: e.target.value })}
+                        required
+                        className="bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                      />
+                      <input
+                        type="text"
+                        placeholder="State"
+                        value={billingForm.state}
+                        onChange={(e) => setBillingForm({ ...billingForm, state: e.target.value })}
+                        required
+                        className="bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Pincode"
+                        value={billingForm.pincode}
+                        onChange={(e) => setBillingForm({ ...billingForm, pincode: e.target.value })}
+                        required
+                        className="bg-white text-gray-900 px-4 py-2 rounded border border-gray-300 focus:border-gray-900 focus:outline-none transition placeholder-gray-400"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        type="submit"
+                        className="flex-1 bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition"
+                      >
+                        Save Billing Address
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowBillingForm(false)}
+                        className="px-4 py-2 text-gray-700 hover:text-gray-900 transition border border-gray-300 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Display billing address when "Same as Shipping" is checked */}
+                {sameAsShipping && selectedAddress && (
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    {(() => {
+                      const shippingAddr = addresses.find(addr => addr._id === selectedAddress);
+                      return shippingAddr ? (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Check size={18} className="text-blue-600" />
+                            <h3 className="text-gray-900 font-semibold">{shippingAddr.fullName}</h3>
+                          </div>
+                          <p className="text-gray-600 text-sm">{shippingAddr.phone}</p>
+                          <p className="text-gray-600 text-sm mt-2">
+                            {shippingAddr.addressLine1}
+                            {shippingAddr.addressLine2 && `, ${shippingAddr.addressLine2}`}
+                          </p>
+                          <p className="text-gray-600 text-sm">
+                            {shippingAddr.city}, {shippingAddr.state} - {shippingAddr.pincode}
+                          </p>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+
+                {/* Billing Address List */}
+                {!sameAsShipping && billingAddresses.length > 0 && (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                    {billingAddresses.map((address) => (
+                      <div
+                        key={address._id}
+                        className={`p-4 rounded-lg transition border-2 ${
+                          selectedBillingAddress === address._id
+                            ? "bg-blue-50 border-blue-300 shadow-sm"
+                            : "bg-gray-50 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div 
+                            className="flex-1 cursor-pointer"
+                            onClick={() => setSelectedBillingAddress(address._id)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <h3 className="text-gray-900 font-semibold">{address.fullName}</h3>
+                              {selectedBillingAddress === address._id && <Check size={18} className="text-blue-600" />}
+                            </div>
+                            <p className="text-gray-600 text-sm mt-1">{address.phone}</p>
+                            <p className="text-gray-600 text-sm mt-2">
+                              {address.addressLine1}
+                              {address.addressLine2 && `, ${address.addressLine2}`}
+                            </p>
+                            <p className="text-gray-600 text-sm">
+                              {address.city}, {address.state} - {address.pincode}
+                            </p>
+                          </div>
+                          
+                          {isLoggedIn && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteBillingAddress(address._id);
+                              }}
+                              className="text-red-500 hover:text-red-700 text-xs font-medium transition ml-3"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!sameAsShipping && billingAddresses.length === 0 && !showBillingForm && (
+                  <p className="text-gray-500 text-center py-8">No billing addresses yet. Add one to continue.</p>
+                )}
+              </div>
             </div>
 
             <div className="lg:col-span-1">
@@ -553,7 +967,7 @@ export default function Checkout() {
                 {/* Checkout Button */}
                 <button
                   onClick={handleCheckout}
-                  disabled={loading || cart.length === 0 || !selectedAddress}
+                  disabled={loading || cart.length === 0 || !selectedAddress || (!sameAsShipping && !selectedBillingAddress)}
                   className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed mb-4"
                 >
                   {loading ? (

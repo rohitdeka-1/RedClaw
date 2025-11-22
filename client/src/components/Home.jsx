@@ -124,6 +124,9 @@ export default function Home() {
 
     // Handle scroll to change products
     useEffect(() => {
+        let touchStartY = 0;
+        let touchEndY = 0;
+
         const handleWheel = (e) => {
             // If scroll is unlocked, allow normal scrolling
             if (!scrollLocked) {
@@ -184,10 +187,81 @@ export default function Home() {
             }
         };
 
+        const handleTouchStart = (e) => {
+            touchStartY = e.touches[0].clientY;
+        };
+
+        const handleTouchMove = (e) => {
+            if (!scrollLocked) return;
+            e.preventDefault();
+        };
+
+        const handleTouchEnd = (e) => {
+            touchEndY = e.changedTouches[0].clientY;
+            const swipeDistance = touchStartY - touchEndY;
+            const minSwipeDistance = 50; // Minimum swipe distance in pixels
+
+            if (Math.abs(swipeDistance) < minSwipeDistance) return;
+
+            // If scroll is unlocked, check for re-lock
+            if (!scrollLocked) {
+                if (swipeDistance < 0 && window.scrollY <= 0) {
+                    setScrollLocked(true);
+                    isTransitioning.current = true;
+                    setTimeout(() => {
+                        isTransitioning.current = false;
+                    }, 300);
+                }
+                return;
+            }
+
+            // Prevent action if currently transitioning
+            if (isTransitioning.current) return;
+
+            // If at last product and swiping up (scrolling down), unlock scroll
+            if (currentProduct === products.length - 1 && swipeDistance > 0) {
+                setScrollLocked(false);
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastScrollTime.current < 500) return;
+            lastScrollTime.current = now;
+
+            if (swipeDistance > 0) {
+                // Swiped up - go to next product
+                if (currentProduct < products.length - 1) {
+                    isTransitioning.current = true;
+                    setCurrentProduct((prev) => prev + 1);
+                    setTimeout(() => {
+                        isTransitioning.current = false;
+                    }, 600);
+                }
+            } else {
+                // Swiped down - go to previous product
+                if (currentProduct > 0) {
+                    isTransitioning.current = true;
+                    setCurrentProduct((prev) => prev - 1);
+                    setTimeout(() => {
+                        isTransitioning.current = false;
+                    }, 600);
+                }
+            }
+        };
+
         const container = containerRef.current;
         if (container && products.length > 0) {
             container.addEventListener("wheel", handleWheel, { passive: false });
-            return () => container.removeEventListener("wheel", handleWheel);
+            container.addEventListener("touchstart", handleTouchStart, { passive: false });
+            container.addEventListener("touchmove", handleTouchMove, { passive: false });
+            container.addEventListener("touchend", handleTouchEnd, { passive: false });
+            
+            return () => {
+                container.removeEventListener("wheel", handleWheel);
+                container.removeEventListener("touchstart", handleTouchStart);
+                container.removeEventListener("touchmove", handleTouchMove);
+                container.removeEventListener("touchend", handleTouchEnd);
+            };
         }
     }, [currentProduct, products.length, scrollLocked]);
 

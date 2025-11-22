@@ -1,9 +1,15 @@
 import Order from "../models/Order.model.js";
 
-// Get all orders for the logged-in user
+// Get all orders for the logged-in user (last 15 days)
 export const getUserOrders = async (req, res) => {
 	try {
-		const orders = await Order.find({ user: req.user._id })
+		const fifteenDaysAgo = new Date();
+		fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+
+		const orders = await Order.find({ 
+			user: req.user._id,
+			createdAt: { $gte: fifteenDaysAgo }
+		})
 			.populate("products.product", "name coverImage price")
 			.sort({ createdAt: -1 });
 

@@ -40,7 +40,7 @@ const setCookies = (res, accessToken, refreshToken) => {
 };
 
 export const signup = async (req, res) => {
-    const { email, password, name } = req.body;
+    const { email, password, name,userPhone } = req.body;
     try {
         const userExists = await User.findOne({ email });
 
@@ -49,20 +49,19 @@ export const signup = async (req, res) => {
             return res.status(400).json({ message: "User already exists. Please login instead." });
         }
 
-        // If user exists but is NOT verified, resend OTP (allow re-registration)
         if (userExists && !userExists.isVerified) {
-            // Generate new OTP
+            
             const otp = generateOTP();
             const otpExpires = getOTPExpiry();
 
-            // Update user with new password and OTP
             userExists.name = name;
             userExists.password = password; // Will be hashed by pre-save middleware
             userExists.verificationOTP = otp;
+            userExists.userPhone = userPhone;
             userExists.otpExpires = otpExpires;
             await userExists.save();
 
-            // Send OTP email
+            
             try {
                 await sendMail(
                     userExists.email,
@@ -75,9 +74,9 @@ export const signup = async (req, res) => {
                         year: new Date().getFullYear()
                     }
                 );
-                console.log("✅ New OTP email sent to existing unverified user:", userExists.email);
+                console.log("New OTP email sent to existing unverified user:", userExists.email);
             } catch (emailError) {
-                console.error("❌ Failed to send OTP email:", emailError.message);
+                console.error("Failed to send OTP email:", emailError.message);
                 return res.status(500).json({ message: "Failed to send verification email. Please try again." });
             }
 
@@ -87,21 +86,20 @@ export const signup = async (req, res) => {
             });
         }
 
-        // Generate OTP for new user
+         
         const otp = generateOTP();
         const otpExpires = getOTPExpiry();
 
-        // Create new user with OTP (unverified)
         const user = await User.create({ 
             name, 
             email, 
+            userPhone,
             password,
             isVerified: false,
             verificationOTP: otp,
             otpExpires: otpExpires
         });
 
-        // Send OTP email
         try {
             await sendMail(
                 user.email,
@@ -114,10 +112,9 @@ export const signup = async (req, res) => {
                     year: new Date().getFullYear()
                 }
             );
-            console.log("✅ OTP email sent successfully to:", user.email);
+            console.log("OTP email sent successfully to:", user.email);
         } catch (emailError) {
-            console.error("❌ Failed to send OTP email:", emailError.message);
-            // Delete the user if email fails
+            console.error(" Failed to send OTP email:", emailError.message);
             await User.findByIdAndDelete(user._id);
             return res.status(500).json({ message: "Failed to send verification email. Please try again." });
         }
@@ -150,18 +147,15 @@ export const verifyOTP = async (req, res) => {
             return res.status(400).json({ message: "Invalid OTP" });
         }
 
-        // Check if OTP is expired
         if (user.otpExpires < new Date()) {
             return res.status(400).json({ message: "OTP has expired. Please request a new one." });
         }
 
-        // Verify user
         user.isVerified = true;
         user.verificationOTP = undefined;
         user.otpExpires = undefined;
         await user.save();
 
-        // Generate tokens and set cookies
         const { accessToken, refreshToken } = generateTokens(user._id);
         await storeRefreshToken(user._id, refreshToken);
         setCookies(res, accessToken, refreshToken);
@@ -181,9 +175,9 @@ export const verifyOTP = async (req, res) => {
                     year: new Date().getFullYear()
                 }
             );
-            console.log("✅ Welcome email sent successfully to:", user.email);
+            console.log("Welcome email sent successfully to:", user.email);
         } catch (emailError) {
-            console.error("❌ Failed to send welcome email:", emailError.message);
+            console.error("Failed to send welcome email:", emailError.message);
         }
 
         res.status(200).json({

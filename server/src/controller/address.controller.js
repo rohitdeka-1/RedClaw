@@ -1,6 +1,5 @@
 import { User } from "../models/User.model.js";
 
-// Get all addresses for the logged-in user
 export const getAddresses = async (req, res) => {
 	try {
 		const user = await User.findById(req.user._id).select("addresses");
@@ -11,7 +10,8 @@ export const getAddresses = async (req, res) => {
 	}
 };
 
-// Add a new address
+
+
 export const addAddress = async (req, res) => {
 	try {
 		const { fullName, phone, addressLine1, addressLine2, city, state, pincode, country, isDefault } = req.body;
@@ -23,14 +23,12 @@ export const addAddress = async (req, res) => {
 
 		const user = await User.findById(req.user._id);
 
-		// If this is set as default, unset all other default addresses
 		if (isDefault) {
 			user.addresses.forEach(addr => {
 				addr.isDefault = false;
 			});
 		}
 
-		// If this is the first address, make it default
 		const isFirstAddress = user.addresses.length === 0;
 
 		user.addresses.push({
@@ -57,7 +55,6 @@ export const addAddress = async (req, res) => {
 	}
 };
 
-// Update an existing address
 export const updateAddress = async (req, res) => {
 	try {
 		const { addressId } = req.params;
@@ -70,14 +67,12 @@ export const updateAddress = async (req, res) => {
 			return res.status(404).json({ message: "Address not found" });
 		}
 
-		// If setting this as default, unset all other default addresses
 		if (isDefault) {
 			user.addresses.forEach(addr => {
 				addr.isDefault = false;
 			});
 		}
-
-		// Update address fields
+ 
 		if (fullName) address.fullName = fullName;
 		if (phone) address.phone = phone;
 		if (addressLine1) address.addressLine1 = addressLine1;
@@ -100,7 +95,6 @@ export const updateAddress = async (req, res) => {
 	}
 };
 
-// Delete an address
 export const deleteAddress = async (req, res) => {
 	try {
 		const { addressId } = req.params;
@@ -115,7 +109,6 @@ export const deleteAddress = async (req, res) => {
 		const wasDefault = address.isDefault;
 		address.deleteOne();
 
-		// If deleted address was default and there are other addresses, make the first one default
 		if (wasDefault && user.addresses.length > 0) {
 			user.addresses[0].isDefault = true;
 		}
@@ -132,7 +125,6 @@ export const deleteAddress = async (req, res) => {
 	}
 };
 
-// Set an address as default
 export const setDefaultAddress = async (req, res) => {
 	try {
 		const { addressId } = req.params;
@@ -144,12 +136,10 @@ export const setDefaultAddress = async (req, res) => {
 			return res.status(404).json({ message: "Address not found" });
 		}
 
-		// Unset all default addresses
 		user.addresses.forEach(addr => {
 			addr.isDefault = false;
 		});
 
-		// Set the selected address as default
 		address.isDefault = true;
 
 		await user.save();
