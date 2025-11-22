@@ -11,7 +11,7 @@ import { LoadingButton } from "./LoadingButton";
 // UI-only data for the 3 products (bgColor, logo, etc.)
 const productUIData = {
     "RedClaw ASTRA": {
-        tagline: "Precision Performance",
+        tagline: "Sharper Instinct",
         show: "ASTRA",
         bgColor: "#0f172a",
         midColor: "#9ca3af",
@@ -56,8 +56,10 @@ export default function Home() {
     const [isAddingToCart, setIsAddingToCart] = useState(false);
     const dropdownRef = useRef(null);
     const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [showFooter, setShowFooter] = useState(false);
 
     const product = products[currentProduct] || {};
+    const isMobile = window.innerWidth < 768;
 
     // Fetch products from backend
     useEffect(() => {
@@ -152,9 +154,24 @@ export default function Home() {
                 return;
             }
 
-            // If we're at the last product and scrolling down, unlock scroll
-            if (currentProduct === products.length - 1 && e.deltaY > 0) {
-                setScrollLocked(false);
+            // If we're at the last product and scrolling down, show footer
+            if (currentProduct === products.length - 1 && e.deltaY > 0 && !showFooter) {
+                isTransitioning.current = true;
+                setShowFooter(true);
+                setTimeout(() => {
+                    isTransitioning.current = false;
+                }, 600);
+                return;
+            }
+
+            // If footer is showing and scrolling up, hide footer
+            if (showFooter && e.deltaY < 0) {
+                e.preventDefault();
+                isTransitioning.current = true;
+                setShowFooter(false);
+                setTimeout(() => {
+                    isTransitioning.current = false;
+                }, 600);
                 return;
             }
 
@@ -210,19 +227,18 @@ export default function Home() {
                 return;
             }
 
-            // If scroll is unlocked, check for re-lock
-            if (!scrollLocked) {
-                if (swipeDistance < 0 && window.scrollY <= 10) {
-                    e.preventDefault();
-                    // Smooth scroll to top first
-                    window.scrollTo({ top: 0, behavior: 'instant' });
-                    // Then lock after a brief delay
-                    setTimeout(() => {
-                        setScrollLocked(true);
-                        setCurrentProduct(products.length - 1);
-                        isTransitioning.current = false;
-                    }, 50);
-                }
+            // Check if we're on mobile
+            const isMobile = window.innerWidth < 768;
+
+            // If showing footer, check for going back
+            if (showFooter && swipeDistance < 0) {
+                e.preventDefault();
+                isTransitioning.current = true;
+                setShowFooter(false);
+                setCurrentProduct(products.length - 1);
+                setTimeout(() => {
+                    isTransitioning.current = false;
+                }, 600);
                 touchStartY = null;
                 return;
             }
@@ -233,15 +249,32 @@ export default function Home() {
                 return;
             }
 
-            // If at last product and swiping up (scrolling down), unlock scroll
-            if (currentProduct === products.length - 1 && swipeDistance > 0) {
-                isTransitioning.current = true;
-                setScrollLocked(false);
-                // Smooth scroll to reveal footer
-                setTimeout(() => {
-                    window.scrollTo({ top: window.innerHeight, behavior: 'smooth' });
-                    isTransitioning.current = false;
-                }, 100);
+            // Don't process product navigation if footer is showing
+            if (showFooter && isMobile) {
+                touchStartY = null;
+                return;
+            }
+
+            // If at last product and swiping up (scrolling down), show footer on mobile or unlock on desktop
+            if (currentProduct === products.length - 1 && swipeDistance > 0 && !showFooter) {
+                if (isMobile) {
+                    // Mobile: Show footer as 4th slide
+                    isTransitioning.current = true;
+                    setShowFooter(true);
+                    // Keep scroll locked on mobile
+                    setScrollLocked(true);
+                    setTimeout(() => {
+                        isTransitioning.current = false;
+                    }, 600);
+                } else {
+                    // Desktop: Unlock scroll to show footer
+                    isTransitioning.current = true;
+                    setScrollLocked(false);
+                    setTimeout(() => {
+                        window.scrollTo({ top: window.innerHeight, behavior: 'smooth' });
+                        isTransitioning.current = false;
+                    }, 100);
+                }
                 touchStartY = null;
                 return;
             }
@@ -290,10 +323,13 @@ export default function Home() {
                 container.removeEventListener("touchend", handleTouchEnd);
             };
         }
-    }, [currentProduct, products.length, scrollLocked]);
+    }, [currentProduct, products.length, scrollLocked, showFooter]);
 
-    // Handle smooth scroll re-locking when scrolling back from footer
+    // Handle smooth scroll re-locking when scrolling back from footer (Desktop only)
     useEffect(() => {
+        const isMobile = window.innerWidth < 768;
+        if (isMobile) return; // Skip for mobile since footer is a slide
+        
         let scrollTimeout;
         const handleScroll = () => {
             if (!scrollLocked && window.scrollY <= 5) {
@@ -439,7 +475,7 @@ export default function Home() {
             
             <div
                 ref={containerRef}
-                className={`min-h-screen w-full relative ${scrollLocked ? 'overflow-hidden fixed inset-0' : 'overflow-auto'} transition-all duration-500`}
+                className={`w-full relative ${scrollLocked ? 'min-h-screen overflow-hidden fixed inset-0' : 'h-screen'} transition-all duration-500`}
                 style={{
                     background: `radial-gradient(circle at center, ${product?.midColor || '#0f172a'} 0%, ${product?.bgColor || '#9ca3af'} 100%)`,
                 }}
@@ -625,29 +661,44 @@ export default function Home() {
 
             {/* Product Navigation Dots - Right */}
             {scrollLocked && (
-                <div className="fixed right-4 md:right-8 top-1/2 transform -translate-y-1/2 flex flex-col gap-3 md:gap-4 z-40">
+                <div className="fixed right-4 md:right-8 top-1/2 transform -translate-y-1/2 flex flex-col gap-3 md:gap-4 z-50">
                     {products.map((_, idx) => (
                         <button
                             key={idx}
-                            onClick={() => setCurrentProduct(idx)}
-                            className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full transition-all duration-500 ${idx === currentProduct ? "bg-white w-6 h-2.5 md:w-8 md:h-3" : "bg-white/30 hover:bg-white/60"
+                            onClick={() => {
+                                setCurrentProduct(idx);
+                                setShowFooter(false);
+                            }}
+                            className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full transition-all duration-500 ${idx === currentProduct && !showFooter ? "bg-white w-6 h-2.5 md:w-8 md:h-3" : "bg-white/30 hover:bg-white/60"
                                 }`}
                         />
                     ))}
+                    {/* Footer dot - now for both mobile and desktop */}
+                    <button
+                        onClick={() => {
+                            setCurrentProduct(products.length - 1);
+                            setShowFooter(true);
+                        }}
+                        className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full transition-all duration-500 ${showFooter ? "bg-white w-6 h-2.5 md:w-8 md:h-3" : "bg-white/30 hover:bg-white/60"}`}
+                    />
                 </div>
             )}
-        </div>
 
-            {/* Footer Section - Below main container, appears when unlocked */}
-            {!scrollLocked && (
-                <div className="w-full">
+            {/* Mobile Footer Slide */}
+            {showFooter && (
+                <div className="fixed inset-0 z-40 transition-transform duration-700 ease-out animate-slide-up overflow-y-auto bg-gray-900">
                     <Footer 
                         products={products} 
-                        setCurrentProduct={setCurrentProduct} 
+                        setCurrentProduct={(idx) => {
+                            setCurrentProduct(idx);
+                            setShowFooter(false);
+                            setScrollLocked(true);
+                        }} 
                         setScrollLocked={setScrollLocked} 
                     />
                 </div>
             )}
+        </div>
         </div>
     );
 }

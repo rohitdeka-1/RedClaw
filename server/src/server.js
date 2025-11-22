@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 5000;
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(cors({
-    origin: ["http://localhost:5173" ,"https://red-claw.vercel.app", "http://127.0.0.1:5173"],
+    origin: ["http://localhost:5173" ,"https://red-claw.vercel.app","https://www.redclaw.in", "http://127.0.0.1:5173"],
     credentials: true,
 }));
 
