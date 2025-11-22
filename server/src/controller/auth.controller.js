@@ -360,3 +360,61 @@ export const getProfile = async (req, res) => {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
+
+export const updateProfile = async (req, res) => {
+    try {
+        const { name, userPhone } = req.body;
+        const userId = req.user._id;
+
+        const updateData = {};
+        if (name) updateData.name = name;
+        if (userPhone) updateData.userPhone = userPhone;
+
+        const user = await User.findByIdAndUpdate(
+            userId,
+            updateData,
+            { new: true, runValidators: true }
+        ).select("-password");
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.json({ 
+            message: "Profile updated successfully",
+            user 
+        });
+    } catch (error) {
+        console.log("Error in updateProfile controller", error.message);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+export const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const userId = req.user._id;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: "Please provide current and new password" });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        const isPasswordValid = await user.comparePassword(currentPassword);
+        if (!isPasswordValid) {
+            return res.status(400).json({ message: "Current password is incorrect" });
+        }
+
+        user.password = newPassword;
+        await user.save();
+
+        res.json({ message: "Password changed successfully" });
+    } catch (error) {
+        console.log("Error in changePassword controller", error.message);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
